@@ -24,11 +24,11 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    Server = {serv,
-	      {serv, start, []},
+    Server = {thrift_server,
+	      {thrift_server, start_link, [9999, echo_thrift, echo]},
 	      permanent,
 	      5000,
 	      worker,
-	      [serv]},
+	      [thrift_server]},
     {ok, { {one_for_one, 5, 10}, [Server]} }.
 
