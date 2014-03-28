@@ -74,19 +74,20 @@ int main(int argc, char** argv) {
   user::ServClient client(protocol);
   //
   try {
-    std::cout << "opening...\n";
+    std::cout << "open ...\n";
     transport->open();
+
     //ping
-    std::cout << "pinging...\n";
+    std::cout << "Ping ...\n";
     client.Ping();
-    client.Ping();
-    client.Ping();
-    /*
+
     // get version
+    std::cout << "GetVerion ...\n";
     std::string version;
     client.GetVersion(version);
-    std::cout << version << std::endl;
+    std::cout << "version:" << version << std::endl;
     //
+    /*
     captcha::Captcha captcha;
     //
     user::User user;
