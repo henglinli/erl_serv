@@ -12,5 +12,6 @@ t() ->
                                            echo_thrift,
                                            [{framed, true}]),
 
-    {_Client1, {ok, ok}} = thrift_client:call(Client0, ping, []),
+    {Client1, {ok, ok}} = thrift_client:call(Client0, ping, []),
+    {_, ok} = thrift_client:close(Client1),
     ok.

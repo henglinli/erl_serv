@@ -24,11 +24,15 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    Server = {thrift_server,
-	      {thrift_server, start_link, [9999, echo_thrift, echo]},
+    Server = {thrift_socket_server,
+	      {thrift_socket_server, start, [[{handler, serv},
+					      {service, serv_thrift},
+					      {port, 9999},
+					      {name, serv},
+					      {framed, true}
+					     ]]},
 	      permanent,
 	      5000,
 	      worker,
-	      [thrift_server]},
+	      [thrift_socket_server]},
     {ok, { {one_for_one, 5, 10}, [Server]} }.
-

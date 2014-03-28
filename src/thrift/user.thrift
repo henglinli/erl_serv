@@ -35,7 +35,7 @@ exception Error {
 const string RegisterError = "Register error",
 
 // user service 
-service Service {
+service Serv {
   // common
   ///////////////////////////////////////////////////
   // ping
