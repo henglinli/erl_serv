@@ -86,16 +86,17 @@ int main(int argc, char** argv) {
     std::string version;
     client.GetVersion(version);
     std::cout << "version:" << version << std::endl;
+
     //
-    /*
     captcha::Captcha captcha;
     //
     user::User user;
     account::Account account;
-    account.name = "leelee";
-    account.token = "leelee";
+    account.name = "lee";
+    account.token = "lee";
     user.account = account;
     //
+    /*
     try {
       // register
       client.Register(captcha, user);
@@ -112,6 +113,7 @@ int main(int argc, char** argv) {
     } catch (user::Error& e) {
       std::cout << e.type << ":" << e.message << std::endl;
     }
+    */
     //
     try {
     // login
@@ -120,7 +122,6 @@ int main(int argc, char** argv) {
     } catch (user::Error& e) {
       std::cout << e.type << ":" << e.message << std::endl;
     }
-    */
     // getchar();
     transport->close();
   } catch (thrift::TException &tx) {
