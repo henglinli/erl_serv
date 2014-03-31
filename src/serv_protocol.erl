@@ -1,4 +1,4 @@
-%% 
+%%
 -module(serv_protocol).
 
 -author('HenryLee<henglinli@gmail.com>').
@@ -44,15 +44,22 @@ init(Ref, Socket, Transport, _Opts = []) ->
 			  #state{socket=Socket, transport=Transport},
 			  ?TIMEOUT).
 
-handle_info(Info, 
+handle_info(Info,
 	    State=#state{socket=Socket, transport=Transport}) ->
     debug("~p ~p", [Info, Transport]),
+    ok = Transport:setopts(Socket, [{active, once}]),
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
-	    ok = Transport:setopts(Socket, [{active, once}]),
-	    Transport:send(Socket, reverse_binary(Data)),
-	    {noreply, State, ?TIMEOUT};
+	    case Data of
+		<<Frame:32/integer, Rest/binary>> ->
+		    handle_frame(Frame, Rest),
+		    Transport:send(Socket, <<"OK">>),
+		    {noreply, State, ?TIMEOUT};
+		_ ->
+		    Transport:send(Socket, Data),
+		    {noreply, State, ?TIMEOUT}
+	    end;
 	{Closed, _Socket} ->
 	    {stop, normal, State};
 	{Error, _Socket, Reason} ->
@@ -83,3 +90,7 @@ reverse_binary(B) when is_binary(B) ->
     [list_to_binary(lists:reverse(binary_to_list(
 				    binary:part(B, {0, byte_size(B)-2})
 				   ))), "\r\n"].
+
+handle_frame(Frame, Rest) ->
+    debug("Frame: ~p", [Frame]),
+    Rest.
