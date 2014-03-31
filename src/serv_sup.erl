@@ -1,5 +1,7 @@
-
+%%
 -module(serv_sup).
+
+-author('HenryLee<henglinli@gmail.com>').
 
 -behaviour(supervisor).
 
@@ -28,7 +30,7 @@ start_link() ->
 init([]) ->
     RanchSupSpec = {ranch_sup, {ranch_sup, start_link, []},
 		    permanent, 5000, supervisor, [ranch_sup]},    
-    ListenerSpec = ranch:child_spec(echo_serv, 100,
+    ListenerSpec = ranch:child_spec(serv, 10,
 				    ranch_tcp, [{port, 9999}],
-				    echo, []),
+				    serv_protocol, []),
     {ok, {{one_for_one, 10, 10}, [RanchSupSpec, ListenerSpec]}}.
