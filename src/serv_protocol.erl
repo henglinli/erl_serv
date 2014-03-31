@@ -39,7 +39,7 @@ init([]) -> {ok, undefined}.
 init(Ref, Socket, Transport, _Opts = []) ->
     ok = proc_lib:init_ack({ok, self()}),
     ok = ranch:accept_ack(Ref),
-    ok = Transport:setopts(Socket, [{active, 10}]),
+    ok = Transport:setopts(Socket, [{active, once}]),
     gen_server:enter_loop(?MODULE, [],
 			  #state{socket=Socket, transport=Transport},
 			  ?TIMEOUT).
@@ -50,6 +50,7 @@ handle_info(Info,
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
+	    ok = Transport:setopts(Socket, [{active, once}]),
 	    Transport:send(Socket, reverse_binary(Data)),
 	    {noreply, State, ?TIMEOUT};
 	{Closed, _Socket} ->

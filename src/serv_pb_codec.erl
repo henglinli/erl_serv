@@ -55,7 +55,7 @@ msg_code(_) -> 255.
 
 %% @doc Selects the appropriate PB decoder for a message code.
 -spec decoder_for(pos_integer()) -> module().
-decoder_for(N) -> riakc_pb.
+decoder_for(_N) -> riakc_pb.
 
 %% @doc Selects the appropriate PB encoder for a given message name.
 -spec encoder_for(atom()) -> module().
