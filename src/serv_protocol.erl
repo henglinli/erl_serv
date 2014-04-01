@@ -47,14 +47,14 @@ init(Ref, Socket, Transport, _Opts = []) ->
 handle_info(Info,
 	    State=#state{socket=Socket, transport=Transport}) ->
     debug("~p ~p", [Info, Transport]),
-    ok = Transport:setopts(Socket, [{active, once}]),
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
+	    ok = Transport:setopts(Socket, [{active, once}]),
 	    case Data of
-		<<Frame:32/integer, Rest/binary>> ->
-		    handle_frame(Frame, Rest),
-		    Transport:send(Socket, <<"OK">>),
+		<<Frame:32/integer, Type:8/integer, Rest/binary>> ->
+		    handle_frame(Frame, Type, Rest),
+		    Transport:send(Socket, Rest),
 		    {noreply, State, ?TIMEOUT};
 		_ ->
 		    Transport:send(Socket, Data),
@@ -65,9 +65,10 @@ handle_info(Info,
 	{Error, _Socket, Reason} ->
 	    {stop, Reason, State};
 	timeout ->
-	    %Transport:send(Socket, <<"noreply">>),
-	    %{noreply, State, ?TIMEOUT};
-	    {stop, normal, State};
+	    %% Transport:send(Socket, <<"noreply">>),
+	    %% {noreply, State, ?TIMEOUT};
+	    %% {stop, normal, State};
+	    {noreply, State,hibernate};
 	_Info ->
 	    {stop, normal, State}
     end.
@@ -86,11 +87,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal.
 
-reverse_binary(B) when is_binary(B) ->
-    [list_to_binary(lists:reverse(binary_to_list(
-				    binary:part(B, {0, byte_size(B)-2})
-				   ))), "\r\n"].
+%% reverse_binary(B) when is_binary(B) ->
+%%     [list_to_binary(lists:reverse(binary_to_list(
+%% 				    binary:part(B, {0, byte_size(B)-2})
+%% 				   ))), "\r\n"].
 
-handle_frame(Frame, Rest) ->
-    debug("Frame: ~p", [Frame]),
+handle_frame(Frame, Type, Rest) ->
+    %% TheType = serv_pb_codec:msg_type(Type),
+    debug("Frame: ~p ~p", [Type, Frame]),
     Rest.
