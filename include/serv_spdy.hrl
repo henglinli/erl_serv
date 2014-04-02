@@ -1,48 +1,8 @@
 %% constants
-%% // Types of SPDY frames.
-%% enum SpdyFrameType {
--define(DATA, 0).
--define(FIRST_CONTROL_TYPE, 1).
--define(SYN_STREAM, 1).
--define(SYN_REPLY, 2).
--define(RST_STREAM, 3).
--define(SETTINGS, 4).
--define(NOOP, 5). %% Because it is valid in SPDY/2, kept for identifiability/enum order.
--define(PING, 6).
--define(GOAWAY, 7).
--define(HEADERS, 8).
--define(WINDOW_UPDATE, 9).
--define(CREDENTIAL, 10). %% // No longer valid.  Kept for identifiability/enum order.
--define(BLOCKED, 11).
--define(PUSH_PROMISE, 12).
--define(CONTINUATION, 13).
--define(LAST_CONTROL_TYPE, 13).
-
-%% // Flags on data packets.
-%% enum SpdyDataFlags {
--define(DATA_FLAG_NONE,  16#00).
--define(DATA_FLAG_FIN, 16#01).
-%% DATA_FLAG_END_SEGMENT = 0x02,
-%% DATA_FLAG_PAD_LOW = 0x10,
-%% DATA_FLAG_PAD_HIGH = 0x20
-
-
-%% // Flags on control packets
-%% enum SpdyControlFlags {
--define(CONTROL_FLAG_NONE, 0).
--define(CONTROL_FLAG_FIN, 1).
--define(CONTROL_FLAG_UNIDIRECTIONAL, 2).
-
-%% enum SpdyPingFlags {
--define(PING_FLAG_ACK,  16#1).
-
 %% enum SpdyHeadersFlags {
 %%   HEADERS_FLAG_END_HEADERS = 0x4,
 %%   HEADERS_FLAG_PRIORITY = 0x8
 %% };
-
-%% enum SpdyPushPromiseFlags {
--define(PUSH_PROMISE_FLAG_END_PUSH_PROMISE, 16#4).
 
 %% // Flags on the SETTINGS control frame.
 %% enum SpdySettingsControlFlags {
@@ -80,6 +40,96 @@
 %%   SETTINGS_ENABLE_PUSH,
 %% };
 
+%% 2.2.2 Data frames
+
+%% +----------------------------------+
+%% |C|       Stream-ID (31bits)       |
+%% +----------------------------------+
+%% | Flags (8)  |  Length (24 bits)   |
+%% +----------------------------------+
+%% |               Data               |
+%% +----------------------------------+
+-record(spdy_data, {
+	  stream_id :: integer(),
+	  flags     :: integer(),
+	  data      :: binary()
+	 }).
+
+%% // Flags on data packets.
+%% enum SpdyDataFlags {
+-define(DATA_FLAG_NONE, 16#00).
+-define(DATA_FLAG_FIN, 16#01).
+%% DATA_FLAG_END_SEGMENT = 0x02,
+%% DATA_FLAG_PAD_LOW = 0x10,
+%% DATA_FLAG_PAD_HIGH = 0x20
+
+%% 2.2.1 Control frames
+
+%% +----------------------------------+
+%% |C| Version(15bits) | Type(16bits) |
+%% +----------------------------------+
+%% | Flags (8)  |  Length (24 bits)   |
+%% +----------------------------------+
+%% |               Data               |
+%% +----------------------------------+
+-record(spdy_control, {
+	  version = $l :: integer(),
+	  type         :: integer(),
+	  flags        :: integer(),
+	  length       :: integer(),
+	  data         :: binary()
+	 }).
+
+%% // Types of SPDY frames.
+%% enum SpdyFrameType {
+-define(DATA, 0).
+-define(FIRST_CONTROL_TYPE, 1).
+-define(SYN_STREAM, 1).
+-define(SYN_REPLY, 2).
+-define(RST_STREAM, 3).
+-define(SETTINGS, 4).
+-define(NOOP, 5). %% Because it is valid in SPDY/2, kept for identifiability/enum order.
+-define(PING, 6).
+-define(GOAWAY, 7).
+-define(HEADERS, 8).
+-define(WINDOW_UPDATE, 9).
+-define(CREDENTIAL, 10). %% // No longer valid.  Kept for identifiability/enum order.
+-define(BLOCKED, 11).
+-define(PUSH_PROMISE, 12).
+-define(CONTINUATION, 13).
+-define(LAST_CONTROL_TYPE, 13).
+
+%% // Flags on control packets
+%% enum SpdyControlFlags {
+-define(CONTROL_FLAG_NONE, 0).
+-define(CONTROL_FLAG_FIN, 1).
+-define(CONTROL_FLAG_UNIDIRECTIONAL, 2).
+
+-record(spdy_syn_stream, {
+	  version = $l   :: integer(),
+	  flags = 0      :: integer(),
+	  stream_id      :: integer(),
+	  assoc_id       :: integer(),
+	  priority = 0   :: integer(),
+	  slot = 0       :: integer(),
+	  headers = <<>> :: binary()
+	 }).
+
+-record(spdy_syn_reply, {
+	  version = $l   :: integer(),
+	  flags = 0      :: integer(),
+	  stream_id      :: integer(),
+	  headers = <<>> :: binary()
+	 }).
+%% enum SpdyPushPromiseFlags {
+-define(PUSH_PROMISE_FLAG_END_PUSH_PROMISE, 16#4).
+
+-record(spdy_rst_stream, {
+	  version = $l :: integer(),
+	  flags = 0    :: integer(),
+	  stream_id    :: integer(),
+	  status_code  :: integer()
+	 }).
 %% // Status codes for RST_STREAM frames.
 %% enum SpdyRstStreamStatus {
 -define(RST_STREAM_INVALID,  0).
@@ -96,6 +146,20 @@
 -define(RST_STREAM_FRAME_TOO_LARGE, 11).
 -define(RST_STREAM_NUM_STATUS_CODES, 12).
 
+-record(spdy_ping, {
+	  version = $l :: integer(),
+	  id           :: integer()
+	 }).
+
+%% enum SpdyPingFlags {
+-define(PING_FLAG_ACK,  16#1).
+
+-record(spdy_goaway, {
+	  version = $l :: integer(),
+	  last_good_id :: integer(),
+	  status_code  :: integer()
+	 }).
+
 %% // Status codes for GOAWAY frames.
 %% enum SpdyGoAwayStatus {
 -define(GOAWAY_INVALID, -1).
@@ -103,71 +167,3 @@
 -define(GOAWAY_PROTOCOL_ERROR, 1).
 -define(GOAWAY_INTERNAL_ERROR, 2).
 -define(GOAWAY_NUM_STATUS_CODES, 3).
-
-%% 2.2.2 Data frames
-
-%% +----------------------------------+
-%% |C|       Stream-ID (31bits)       |
-%% +----------------------------------+
-%% | Flags (8)  |  Length (24 bits)   |
-%% +----------------------------------+
-%% |               Data               |
-%% +----------------------------------+
--record(spdy_data, {
-	  stream_id :: integer(),
-	  flags = 0 :: integer(),
-	  length :: integer(),
-	  data :: binary()
-	 }).
-
-%% 2.2.1 Control frames
-
-%% +----------------------------------+
-%% |C| Version(15bits) | Type(16bits) |
-%% +----------------------------------+
-%% | Flags (8)  |  Length (24 bits)   |
-%% +----------------------------------+
-%% |               Data               |
-%% +----------------------------------+
--record(spdy_control, {
-	  version = $l :: integer(),
-	  type :: integer(),
-	  flags :: integer(),
-	  length :: integer(),
-	  data :: binary()
-	 }).
-
--record(spdy_syn_stream, {
-	  version = $l :: integer(),
-	  flags = 0   :: integer(),
-	  stream_id    :: integer(),
-	  assoc_id     :: integer(),
-	  priority    :: integer(),
-	  slot        :: integer(),
-	  headers     :: list()
-	 }).
-
--record(spdy_syn_reply, {
-	  version = $l :: integer(),
-	  flags = 0   :: integer(),
-	  stream_id    :: integer(),
-	  headers     :: list()
-	 }).
-
--record(spdy_rst_stream, {
-	  version = $l :: integer(),
-	  flags = 0   :: integer(),
-	  stream_id    :: integer(),
-	  status_code  :: integer()
-	 }).
-
--record(spdy_ping, {
-	  version = $l :: integer(),
-	  id          :: integer()
-	 }).
-
--record(spdy_goaway, {
-	  version = $l :: integer(),
-	  last_good_id  :: integer(),
-	  status_code  :: integer()
-	 }).

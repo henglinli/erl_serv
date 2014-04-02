@@ -10,7 +10,40 @@
 
 %% Build.
 
+%% data flag
+-spec data_flag_type(atom()) -> integer().
+data_flag_type(data_flag_none) ->
+    ?DATA_FLAG_NONE;
+data_flag_type(data_flag_fin) ->
+    ?DATA_FLAG_FIN.
+
+-spec data_flag_name(integer()) -> atom().
+data_flag_name(?DATA_FLAG_NONE) ->
+    data_flag_none;
+data_flag_name(?DATA_FLAG_FIN) ->
+    data_flag_fin;
+data_flag_name(_) ->
+    undefined.
+%% control flag
+-spec control_flag_type(atom()) -> integer().
+control_flag_type(control_flag_none) ->
+    ?CONTROL_FLAG_NONE;
+control_flag_type(control_flag_fin) ->
+    ?CONTROL_FLAG_FIN;
+control_flag_type(control_flag_unidirectional) ->
+    ?CONTROL_FLAG_UNIDIRECTIONAL.
+-spec control_flag_name(integer()) -> atom().
+control_flag_name(?CONTROL_FLAG_NONE) ->
+    control_flag_none;
+control_flag_name(?CONTROL_FLAG_FIN) ->
+    control_flag_fin;
+control_flag_name(?CONTROL_FLAG_UNIDIRECTIONAL) ->
+    control_flag_unidirectional;
+control_flag_name(_) ->
+    undefined.
+
 %% split date, got frame
+-spec split_data(binary()) -> boolean().
 split_data(Data = << _:40, Length:24, _/binary >>)
   when byte_size(Data) >= Length + 8 ->
     Length2 = Length + 8,
@@ -29,6 +62,14 @@ split_data(_) ->
 %% |               Data               |
 %% +----------------------------------+
 
+-spec parse_frame(binary()) ->{#spdy_data{}
+			       | #spdy_syn_stream{}
+			       | #spdy_syn_reply{}
+			       | #spdy_rst_stream{}
+			       | #spdy_ping{}
+			       | #spdy_goaway{},
+			       binary()}
+				  | undefined.
 %% parse data frame
 parse_frame(<< 0:1, %% alwalys 0
 	       StreamID:31/big-unsigned-integer,
@@ -38,7 +79,6 @@ parse_frame(<< 0:1, %% alwalys 0
 	       Rest/binary>>) ->
     {#spdy_data{stream_id = StreamID,
 		flags = Flags,
-		length = Length,
 		data = Data},
      Rest};
 %% 2.2.1 Control frames
@@ -70,6 +110,12 @@ parse_frame(<< 1:1, %% always 1
 parse_frame(_) ->
     undefined.
 
+-spec parse_control_frame(binary()) ->
+				 #spdy_syn_stream{}
+				     | #spdy_syn_reply{}
+				     | #spdy_rst_stream{}
+				     | #spdy_ping{}
+				     | #spdy_goaway{}.
 %% +------------------------------------+
 %% |1|    version    |         1        |
 %% +------------------------------------+
@@ -208,3 +254,155 @@ parse_control_frame(#spdy_control{
     #spdy_goaway{version = Version,
 		 last_good_id = LastGoodID,
 		 status_code = StatusCode}.
+
+-spec build_frame(#spdy_data{}
+		  | #spdy_syn_stream{}
+		  | #spdy_syn_reply{}
+		  | #spdy_rst_stream{}
+		  | #spdy_ping{}
+		  | #spdy_goaway{}) ->
+			 binary().
+%% build frame
+%% +----------------------------------+
+%% |C|       Stream-ID (31bits)       |
+%% +----------------------------------+
+%% | Flags (8)  |  Length (24 bits)   |
+%% +----------------------------------+
+%% |               Data               |
+%% +----------------------------------+
+build_frame(#spdy_data{stream_id = StreamID,
+		       flags = Flags,
+		       data = Data}) ->
+	    Length = size(Data),
+	    << 0:1, StreamID:31/big-unsigned-integer,
+	       Flags:8/big-unsigned-integer,
+	       Length:24/big-unsigned-integer,
+	       Data/binary
+	    >>;
+
+%% +------------------------------------+
+%% |1|    version    |         1        |
+%% +------------------------------------+
+%% |  Flags (8)  |  Length (24 bits)    |
+%% +------------------------------------+
+%% |X|           Stream-ID (31bits)     |
+%% +------------------------------------+
+%% |X| Associated-To-Stream-ID (31bits) |
+%% +------------------------------------+
+%% | Pri|Unused | Slot |                |
+%% +-------------------+                |
+%% | Number of Name/Value pairs (int32) |   <+
+%% +------------------------------------+    |
+%% |     Length of name (int32)         |    | This section is the
+%% +------------------------------------+    | "Name/Value
+%% |           Name (string)            |    | Header Block",
+%% +------------------------------------+    | and is compressed.
+%% |     Length of value  (int32)       |    |
+%% +------------------------------------+    |
+%% |          Value   (string)          |    |
+%% +------------------------------------+    |
+%% |           (repeats)                |   <+
+
+build_frame(#spdy_syn_stream{version = Version = $l,
+			     flags = Flags,
+			     stream_id = StreamID,
+			     assoc_id = AssocStreamID,
+			     priority = Priority = 0,
+			     slot = Slot = 0,
+			     headers = _Headers = <<>>
+			    }) ->
+    build_control_frame(Version, ?SYN_STREAM, Flags,
+			<<0:1, StreamID:31/big-unsigned-integer,
+			  0:1, AssocStreamID:31/big-unsigned-integer,
+			  Priority:3/big-unsigned-integer,
+			  0:5, % unuesd
+			  Slot:8/big-unsigned-integer
+			>>);
+
+%% +------------------------------------+
+%% |1|    version    |         2        |
+%% +------------------------------------+
+%% |  Flags (8)  |  Length (24 bits)    |
+%% +------------------------------------+
+%% |X|           Stream-ID (31bits)     |
+%% +------------------------------------+
+%% | Number of Name/Value pairs (int32) |   <+
+%% +------------------------------------+    |
+%% |     Length of name (int32)         |    | This section is the "Name/Value
+%% +------------------------------------+    | Header Block", and is compressed.
+%% |           Name (string)            |    |
+%% +------------------------------------+    |
+%% |     Length of value  (int32)       |    |
+%% +------------------------------------+    |
+%% |          Value   (string)          |    |
+%% +------------------------------------+    |
+%% |           (repeats)                |   <+
+build_frame(#spdy_syn_reply{version = Version = $l,
+			    flags = Flags,
+			    stream_id = StreamID,
+			    headers = _Headers = <<>>
+			   }) ->
+    build_control_frame(Version, ?SYN_REPLY, Flags,
+			<<0:1, StreamID:31/big-unsigned-integer >>);
+
+%% +----------------------------------+
+%% |1|   version    |         3       |
+%% +----------------------------------+
+%% | Flags (8)  |         8           |
+%% +----------------------------------+
+%% |X|          Stream-ID (31bits)    |
+%% +----------------------------------+
+%% |          Status code             |
+%% +----------------------------------+
+build_frame(#spdy_rst_stream{version = Version = $l,
+			     stream_id = StreamID,
+			     status_code = StatusCode
+			    }) ->
+    build_control_frame(Version, ?RST_STREAM, ?CONTROL_FLAG_NONE,
+			<<0:1, StreamID:31/big-unsigned-integer,
+			  StatusCode:32/big-unsigned-integer
+			>>);
+
+%% +----------------------------------+
+%% |1|   version    |         6       |
+%% +----------------------------------+
+%% | 0 (flags) |     4 (length)       |
+%% +----------------------------------|
+%% |            32-bit ID             |
+%% +----------------------------------+
+build_frame(#spdy_ping{version = Version = $l,
+		       id = PingID
+	       }) ->
+    build_control_frame(Version, ?PING, ?CONTROL_FLAG_NONE,
+			<< PingID:32/big-unsigned-integer >>);
+
+%% +----------------------------------+
+%% |1|   version    |         7       |
+%% +----------------------------------+
+%% | 0 (flags) |     8 (length)       |
+%% +----------------------------------|
+%% |X|  Last-good-stream-ID (31 bits) |
+%% +----------------------------------+
+%% |          Status code             |
+%% +----------------------------------+
+build_frame(#spdy_goaway{version = Version = $l,
+			 last_good_id = LastGoodID,
+			 status_code = StatusCode
+	      }) ->
+    build_control_frame(Version, ?GOAWAY, ?CONTROL_FLAG_NONE,
+			<<0:1, LastGoodID:31/big-unsigned-integer,
+			  StatusCode:32/big-unsigned-integer >>);
+build_frame(_) ->
+    <<>>.
+
+-spec build_control_frame(integer(), integer(), integer(), binary()) ->
+				binary().
+
+build_control_frame(Version = $l, Type, Flags, Data) ->
+    Length = size(Data),
+    <<1:1, Version:15/big-unsigned-integer,
+      Type:16/big-unsigned-integer,
+      Flags:8/big-unsigned-integer,
+      Length:24/big-unsigned-integer,
+      Data/binary
+    >>.
