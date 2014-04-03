@@ -4,18 +4,23 @@
 
 -module(serv_spdy).
 -include("serv_spdy.hrl").
-%% Parse.
+%% utils
+-export([data_flag_code/1, data_flag_name/1]).
+-export([control_flag_code/1, control_flag_name/1]).
+-export([goaway_status_code/1, goaway_status_name/1]).
+%% parse
 -export([split_data/1]).
 -export([parse_frame/1]).
-
-%% Build.
-
+%% build
+-export([build_frame/1]).
 %% data flag
--spec data_flag_type(atom()) -> integer().
-data_flag_type(data_flag_none) ->
+-spec data_flag_code(atom()) -> integer().
+data_flag_code(data_flag_none) ->
     ?DATA_FLAG_NONE;
-data_flag_type(data_flag_fin) ->
-    ?DATA_FLAG_FIN.
+data_flag_code(data_flag_fin) ->
+    ?DATA_FLAG_FIN;
+data_flag_code(_) ->
+    ?DATA_FLAG_NONE.
 
 -spec data_flag_name(integer()) -> atom().
 data_flag_name(?DATA_FLAG_NONE) ->
@@ -24,14 +29,18 @@ data_flag_name(?DATA_FLAG_FIN) ->
     data_flag_fin;
 data_flag_name(_) ->
     undefined.
+
 %% control flag
--spec control_flag_type(atom()) -> integer().
-control_flag_type(control_flag_none) ->
+-spec control_flag_code(atom()) -> integer().
+control_flag_code(control_flag_none) ->
     ?CONTROL_FLAG_NONE;
-control_flag_type(control_flag_fin) ->
+control_flag_code(control_flag_fin) ->
     ?CONTROL_FLAG_FIN;
-control_flag_type(control_flag_unidirectional) ->
-    ?CONTROL_FLAG_UNIDIRECTIONAL.
+control_flag_code(control_flag_unidirectional) ->
+    ?CONTROL_FLAG_UNIDIRECTIONAL;
+control_flag_code(_) ->
+    ?CONTROL_FLAG_NONE.
+
 -spec control_flag_name(integer()) -> atom().
 control_flag_name(?CONTROL_FLAG_NONE) ->
     control_flag_none;
@@ -42,8 +51,29 @@ control_flag_name(?CONTROL_FLAG_UNIDIRECTIONAL) ->
 control_flag_name(_) ->
     undefined.
 
+%% goaway status
+-spec goaway_status_code(atom()) -> integer().
+goaway_status_code(goaway_ok) ->
+    ?GOAWAY_OK;
+goaway_status_code(goaway_protocol_error) ->
+    ?GOAWAY_PROTOCOL_ERROR;
+goaway_status_code(goaway_internal_error) ->
+    ?GOAWAY_INTERNAL_ERROR;
+goaway_status_code(_) ->
+    ?GOAWAY_OK.
+
+-spec goaway_status_name(integer()) -> atom().
+goaway_status_name(?GOAWAY_OK) ->
+    goaway_ok;
+goaway_status_name(?GOAWAY_PROTOCOL_ERROR) ->
+    goaway_protocol_error;
+goaway_status_name(?GOAWAY_INTERNAL_ERROR) ->
+    goaway_internal_error;
+goaway_status_name(_) ->
+    undefined.
+
 %% split date, got frame
--spec split_data(binary()) -> boolean().
+-spec split_data(binary()) -> {true, binary(), binary()} | false.
 split_data(Data = << _:40, Length:24, _/binary >>)
   when byte_size(Data) >= Length + 8 ->
     Length2 = Length + 8,

@@ -1,8 +1,7 @@
 %%
 -module(serv_protocol).
-
 -author('HenryLee<henglinli@gmail.com>').
-
+-include("serv_spdy.hrl").
 -behaviour(gen_server).
 -behaviour(ranch_protocol).
 
@@ -20,7 +19,11 @@
 
 -define(TIMEOUT, 5000).
 
--record(state, {socket, transport}).
+-record(state, {socket::any(),
+		transport::module(),
+		streams::gb_trees:tree(integer(), any()),
+		last_good_id = 0 ::integer()
+	       }).
 
 %% API.
 
@@ -41,24 +44,37 @@ init(Ref, Socket, Transport, _Opts = []) ->
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}]),
     gen_server:enter_loop(?MODULE, [],
-			  #state{socket=Socket, transport=Transport},
+			  #state{socket = Socket,
+				 transport = Transport,
+				 streams = gb_trees:empty(),
+				 last_good_id = 0
+				},
 			  ?TIMEOUT).
 
 handle_info(Info,
-	    State=#state{socket=Socket, transport=Transport}) ->
+	    State=#state{socket = Socket,
+			 transport = Transport,
+			 streams = Streams,
+			 last_good_id = LastGoodID
+			}) ->
     debug("~p ~p", [Info, Transport]),
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
 	    ok = Transport:setopts(Socket, [{active, once}]),
-	    case Data of
-		<<Frame:32/integer, Type:8/integer, Rest/binary>> ->
-		    handle_frame(Frame, Type, Rest),
-		    Transport:send(Socket, Rest),
-		    {noreply, State, ?TIMEOUT};
-		_ ->
-		    Transport:send(Socket, Data),
-		    {noreply, State, ?TIMEOUT}
+	    case serv_spdy:split_data(Data) of
+		false ->
+		    Reply = serv_spdy:build_frame(
+			      #spdy_goaway{version = $l,
+					   last_good_id = LastGoodID,
+					   status_code = 
+					       serv_spdy:goaway_status_code(
+						 goaway_protocol_error)}),
+		    Transport:send(Socket, Reply),
+		    {stop, normal, State};
+		{true, Frame, Rest} ->
+		    Transport:send(Socket, <<"OK">>),		    
+		    {noreply, State, hibernate}
 	    end;
 	{Closed, _Socket} ->
 	    {stop, normal, State};
@@ -68,7 +84,7 @@ handle_info(Info,
 	    %% Transport:send(Socket, <<"noreply">>),
 	    %% {noreply, State, ?TIMEOUT};
 	    %% {stop, normal, State};
-	    {noreply, State,hibernate};
+	    {noreply, State, hibernate};
 	_Info ->
 	    {stop, normal, State}
     end.
@@ -86,13 +102,3 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% Internal.
-
-%% reverse_binary(B) when is_binary(B) ->
-%%     [list_to_binary(lists:reverse(binary_to_list(
-%% 				    binary:part(B, {0, byte_size(B)-2})
-%% 				   ))), "\r\n"].
-
-handle_frame(Frame, Type, Rest) ->
-    %% TheType = serv_pb_codec:msg_type(Type),
-    debug("Frame: ~p ~p", [Type, Frame]),
-    Rest.
