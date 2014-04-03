@@ -75,7 +75,7 @@ goaway_status_name(_) ->
 %% split date, got frame
 -spec split_data(binary()) -> {true, binary(), binary()} | false.
 split_data(Data = << _:40, Length:24, _/binary >>)
-  when byte_size(Data) >= Length + 8 ->
+  when size(Data) >= Length + 8 ->
     Length2 = Length + 8,
     << Frame:Length2/binary, Rest/binary >> = Data,
     {true, Frame, Rest};
