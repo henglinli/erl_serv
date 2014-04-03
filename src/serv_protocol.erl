@@ -57,24 +57,26 @@ handle_info(Info,
 			 streams = Streams,
 			 last_good_id = LastGoodID
 			}) ->
-    debug("~p ~p", [Info, Transport]),
     {OK, Closed, Error} = Transport:messages(),
     case Info of
-	{OK, _Socket, Data} ->
-	    ok = Transport:setopts(Socket, [{active, once}]),
+	{OK, _Socket, Data} ->	   
 	    case serv_spdy:split_data(Data) of
 		false ->
+		    debug("data: ~p", [Data]),
 		    Reply = serv_spdy:build_frame(
 			      #spdy_goaway{version = $l,
 					   last_good_id = LastGoodID,
 					   status_code = 
 					       serv_spdy:goaway_status_code(
 						 goaway_protocol_error)}),
+		    ok = Transport:setopts(Socket, [{active, once}]),
 		    Transport:send(Socket, Reply),
-		    {stop, normal, State};
+		    {stop, normal, State};		    
 		{true, Frame, Rest} ->
+		    debug("frame: ~p ~p", [Frame]),
+		    ok = Transport:setopts(Socket, [{active, once}]),
 		    Transport:send(Socket, <<"OK">>),		    
-		    {noreply, State, hibernate}
+		    {noreply, State, ?TIMEOUT}
 	    end;
 	{Closed, _Socket} ->
 	    {stop, normal, State};
