@@ -11,3 +11,4 @@ src/build
 src/thrift/gen-*
 ebin
 _rel
+log

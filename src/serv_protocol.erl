@@ -31,7 +31,8 @@ start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
 
 debug(Format, Data) ->
-    error_logger:info_msg(Format, Data).
+   % error_logger:info_msg(Format, Data).
+    lager:info(Format, Data).
 
 %% gen_server.
 

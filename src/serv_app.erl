@@ -13,6 +13,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    lager:start(),
     serv_sup:start_link().
 
 stop(_State) ->
