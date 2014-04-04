@@ -32,5 +32,5 @@ init([]) ->
 		    permanent, 5000, supervisor, [ranch_sup]},    
     ListenerSpec = ranch:child_spec(serv, 10,
 				    ranch_tcp, [{port, 9999}],
-				    serv_protocol, []),
+				    serv_session, []),
     {ok, {{one_for_one, 10, 10}, [RanchSupSpec, ListenerSpec]}}.

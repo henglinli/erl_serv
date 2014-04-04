@@ -26,7 +26,7 @@ start() ->
     start_link().
 
 start_link() ->
-    gen_server:start_link({local,?MODULE}, ?MODULE, [], []).
+    gen_server:start({local,?MODULE}, ?MODULE, [], []).
 
 init(_Args) ->
     SomeHostInNet = "localhost", % to make it runnable on one machine
