@@ -1,6 +1,6 @@
 .PHONY: deps test
 
-#ESCRIPT = /usr/local/bin/escript
+ESCRIPT = /usr/local/bin/escript
 
 all: compile generate
 

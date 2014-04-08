@@ -11,7 +11,7 @@
 
 %% gen_server.
 -export([init/1]).
--export([init/4]).
+-export([init/5]).
 -export([handle_call/3]).
 -export([handle_cast/2]).
 -export([handle_info/2]).
@@ -31,7 +31,7 @@ debug(Format, Data) ->
 
 %% API.
 start_link(Ref, Socket, Transport, Opts) ->
-    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts]).
+    proc_lib:start_link(?MODULE, init, [Ref, Socket, Transport, Opts, self()]).
 
 send(Pid, Frame) when is_pid(Pid) ->
     gen_server:cast(Pid, {send, Frame}).
@@ -41,8 +41,8 @@ send(Pid, Frame) when is_pid(Pid) ->
 %% we can use the -behaviour(gen_server) attribute.
 init([]) -> {ok, undefined}.
 
-init(Ref, Socket, Transport, _Opts = []) ->
-    ok = proc_lib:init_ack({ok, self()}),
+init(Ref, Socket, Transport, _Opts = [], Parent) ->
+    ok = proc_lib:init_ack(Parent, {ok, self()}),
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}]),
     gen_server:enter_loop(?MODULE, [],
