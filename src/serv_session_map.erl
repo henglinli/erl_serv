@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author  Henry Lee <henglinli@gmail.com>
-%%% @copyright (C) 2014, 
+%%% @copyright (C) 2014,
 %%% @doc
 %%%
 %%% @end
@@ -12,6 +12,7 @@
 
 %% API
 -export([start_link/0]).
+-export([ref/0, clear/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -19,7 +20,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {tid::ets:tid() | atom()}).
 
 %%%===================================================================
 %%% API
@@ -51,7 +52,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{}}.
+    Options = [named_table, {write_concurrency, true},  {read_concurrency, true}],
+    Tid = ets:new(?SERVER, Options),
+    {ok, #state{tid = Tid}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -67,6 +70,9 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(ref, _From, #state{tid = Tid} = State) ->
+    {reply, Tid, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -81,6 +87,10 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast(clear,  #state{tid = Tid} = State) ->
+    ets:delete_all_objects(Tid),
+    {noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -125,3 +135,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec ref() -> ets:tid() | atom().
+ref() ->
+    gen_server:call(?SERVER, ref).
+
+-spec clear() -> boolean().
+clear() ->
+    gen_server:cast(?SERVER, clear).
