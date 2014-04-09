@@ -29,15 +29,17 @@
 
 -define(TIMEOUT, 5000).
 
--record(state, {socket::any(),
-		transport::module(),
-		streams::[integer()],
-		last_good_id = 0 ::integer()
+-record(session, {streams :: [integer()],
+		  last_good_id = 0 :: integer(),
+		  ping_id = 0 :: integer()
+		 }).
+
+-record(state, {socket :: any(),
+		transport :: module(),
+		session :: #session{}
 	       }).
 
--record(session, {streams::[integer()],
-		  last_good_id = 0 ::integer()
-		 }).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -49,11 +51,11 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Ref :: ranch:ref(), 
-		 Socket :: any(), 
-		 Transport :: module(), 
+-spec start_link(Ref :: ranch:ref(),
+		 Socket :: any(),
+		 Transport :: module(),
 		 Options :: any()) ->
-			{ok, ConnectionPid :: pid()} 
+			{ok, ConnectionPid :: pid()}
 			    | {error, Reason :: any()}.
 start_link(Ref, Socket, Transport, Opts) ->
     proc_lib:start_link(?MODULE, init,
@@ -78,18 +80,22 @@ start_link(Ref, Socket, Transport, Opts) ->
 init([]) ->
     {ok, undefined}.
 
--spec init(Ref :: ranch:ref(), 
-	   Socket :: any(), 
-	   Transport :: module(), 
-	   Options :: any(), 
+-spec init(Ref :: ranch:ref(),
+	   Socket :: any(),
+	   Transport :: module(),
+	   Options :: any(),
 	   Parent :: pid()) ->
 		  {ok, ConnectionPid :: pid()} | {error, Reason :: any()}.
 init(Ref, Socket, Transport, Opts, Parent) ->
     ok = proc_lib:init_ack(Parent, {ok, self()}),
-    MaybeServSession = lists:keyfind(serv_session_map, 1, Opts), 
+    MaybeServSession = lists:keyfind(serv_session_map, 1, Opts),
     case Transport:peername(Socket) of
 	{ok, Key} ->
 	    Tid = ets:new(?SERVER, []),
+	    Session = #session{streams = [],
+			       last_good_id = 0,
+			       ping_id = 0},
+	    true = ets:insert(Tid, {session, Session}),
 	    case MaybeServSession of
 		false ->
 		    not_happend_here;
@@ -101,8 +107,7 @@ init(Ref, Socket, Transport, Opts, Parent) ->
 	    gen_server:enter_loop(?MODULE, [],
 				  #state{socket = Socket,
 					 transport = Transport,
-					 streams = [],
-					 last_good_id = 0
+					 session = Session
 					},
 				  ?TIMEOUT);
 	{error, Reason} ->
@@ -140,8 +145,11 @@ handle_call(_Request, _From, State) ->
 handle_cast({send, Frame},
 	    #state{socket = Socket,
 		   transport = Transport,
-		   streams = _Streams,
-		   last_good_id = _LastGoodID
+		   session = #session {
+				streams = _Streams,
+				last_good_id = _LastGoodID,
+				ping_id = _ServerPingId
+			       }
 		  }) ->
     ok = Transport:setopts(Socket, [{active, once}]),
     Transport:send(Socket, Frame);
@@ -165,12 +173,9 @@ handle_info(timeout, State) ->
     %% {stop, normal, State};
     {noreply, State, hibernate};
 
-handle_info(Info,
-	    State=#state{socket = _Socket,
-			 transport = Transport,
-			 streams = _Streams,
-			 last_good_id = _LastGoodID
-			}) ->
+handle_info(Info, State = #state {
+			     transport = Transport
+			    }) ->
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
@@ -236,11 +241,10 @@ handle_data(Data, State) ->
 	    debug("data: ~p", [Data]),
 	    send_goaway(State);
 	{true, Frame, Rest} ->
-	    debug("frame: ~p", [Frame]),
 	    handle_frame(Frame, Rest, State)
     end.
 
--spec handle_frame(binary(), binary(), #state{}) -> 
+-spec handle_frame(binary(), binary(), #state{}) ->
 			  ok | {error, closed | inet:posix()}.
 handle_frame(Frame, <<>>, State) ->
     handle_frame_helper(Frame, State);
@@ -251,34 +255,55 @@ handle_frame(Frame, Rest, State) ->
 
 -spec handle_frame_helper(binary(), #state{}) ->
 				 ok | {error, closed | inet:posix()}.
-handle_frame_helper(Frame, #state{socket = Socket,
-				 transport = Transport,
-				 streams = _Streams,
-				 last_good_id = _LastGoodID
-				}) ->
+handle_frame_helper(Frame, State = #state {
+				      socket = Socket,
+				      transport = Transport
+				     }) ->
     debug("frame: ~p", [Frame]),
-    ok = Transport:setopts(Socket, [{active, once}]),
     case serv_spdy:parse_frame(Frame) of
 	#spdy_data{} ->
-	    Transport:send(Socket, <<"OK">>);
+	    send_server_ping(State);
 	#spdy_syn_stream{} ->
-	    Transport:send(Socket, <<"OK">>);
+	    send_server_ping(State);
 	#spdy_syn_reply{} ->
-	    Transport:send(Socket, <<"OK">>);
+	    send_server_ping(State);
 	#spdy_rst_stream{} ->
-	    Transport:send(Socket, <<"OK">>);
-	#spdy_ping{} ->
-	    Transport:send(Socket, <<"OK">>);
+	    send_server_ping(State);
+	#spdy_ping{version = $l,
+		   id = Id} ->
+	    case Id band 1 of
+		1 ->
+		   send_goaway(State);
+		_ ->
+		    send_server_ping(State)
+	    end;
 	#spdy_goaway{} ->
-	    Transport:send(Socket, <<"OK">>)
+	    send_server_ping(State);
+	_ ->
+	    send_goaway(State)
     end.
+
+-spec send_reply(Socket :: any(),
+		 Transport :: module(),
+		 #spdy_data{}
+		 | #spdy_syn_stream{}
+		 | #spdy_syn_reply{}
+		 | #spdy_rst_stream{}
+		 | #spdy_ping{}
+		 | #spdy_goaway{}) ->
+			ok | {error, closed | inet:posix()}.
+send_reply(Socket, Transport, Frame) ->
+    ok = Transport:setopts(Socket, [{active, once}]),
+    Transport:send(Socket, Frame).
+
 %% send goway frame
 -spec send_goaway(#state{}) ->
 			 ok | {error, closed | inet:posix()}.
 send_goaway(#state{socket = Socket,
 		   transport = Transport,
-		   streams = _Streams,
-		   last_good_id = LastGoodID
+		   session = #session {
+				last_good_id = LastGoodID
+			       }
 		  }) ->
     Reply = serv_spdy:build_frame(
 	      #spdy_goaway{
@@ -287,5 +312,31 @@ send_goaway(#state{socket = Socket,
 		 status_code =
 		     serv_spdy:goaway_status_code(
 		       goaway_protocol_error)}),
-    ok = Transport:setopts(Socket, [{active, once}]),
-    Transport:send(Socket, Reply).
+    send_reply(Socket, Transport, Reply).
+
+-spec send_server_ping(#state{}) ->
+			      ok | {error, closed | inet:posix()}.
+send_server_ping(#state{socket = Socket,
+			transport = Transport,
+			session = #session {
+				     streams = _Streams,
+				     last_good_id = _LastGoodID,
+				     ping_id = ServerPingId
+				    }
+		       }) ->
+
+    Reply = serv_spdy:build_frame(
+	      #spdy_ping{version = $l,
+			 id = ServerPingId}),
+    send_reply(Socket, Transport, Reply).
+
+%% %% create session, not used yet
+%% -spec create_session(Tid :: ets:tid() | atom()) -> true.
+%% create_session(Tid) ->
+%%     ets:insert(Tid, {session, #session{
+%%				 streams = [],
+%%				 last_good_id = 0,
+%%				 ping_id = 0}}).
+%% -spec create_ping_counter(Tid :: ets:tid() | atom()) -> true.
+%% create_ping_counter(Tid) ->
+%%     ets:insert(Tid, {ping_id, 0}).
