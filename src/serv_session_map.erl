@@ -52,7 +52,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    Options = [named_table, {write_concurrency, true},  {read_concurrency, true}],
+    Options = [public, {write_concurrency, true}, {read_concurrency, true}],
     Tid = ets:new(?SERVER, Options),
     {ok, #state{tid = Tid}}.
 

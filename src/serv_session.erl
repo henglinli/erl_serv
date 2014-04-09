@@ -15,7 +15,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, start_link/4]).
+-export([start_link/4]).
 
 -export([send/2]).
 
@@ -49,11 +49,14 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
+-spec start_link(Ref :: ranch:ref(), 
+		 Socket :: any(), 
+		 Transport :: module(), 
+		 Options :: any()) ->
+			{ok, ConnectionPid :: pid()} 
+			    | {error, Reason :: any()}.
 start_link(Ref, Socket, Transport, Opts) ->
-    proc_lib:start_link({local, ?SERVER}, ?MODULE, init,
+    proc_lib:start_link(?MODULE, init,
 			[Ref, Socket, Transport, Opts, self()]).
 
 %%%===================================================================
@@ -71,15 +74,28 @@ start_link(Ref, Socket, Transport, Opts) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init(Options :: any()) -> {ok, undefined}.
 init([]) ->
-   {ok, undefined}.
+    {ok, undefined}.
 
-init(Ref, Socket, Transport, _Opts = [SessionMap], Parent) ->
+-spec init(Ref :: ranch:ref(), 
+	   Socket :: any(), 
+	   Transport :: module(), 
+	   Options :: any(), 
+	   Parent :: pid()) ->
+		  {ok, ConnectionPid :: pid()} | {error, Reason :: any()}.
+init(Ref, Socket, Transport, Opts, Parent) ->
     ok = proc_lib:init_ack(Parent, {ok, self()}),
-    case Transport:peername() of
+    MaybeServSession = lists:keyfind(serv_session_map, 1, Opts), 
+    case Transport:peername(Socket) of
 	{ok, Key} ->
 	    Tid = ets:new(?SERVER, []),
-	    ets:insert(SessionMap, {Key, Tid}),
+	    case MaybeServSession of
+		false ->
+		    not_happend_here;
+		{serv_session_map, SessionMap} ->
+		    ets:insert(SessionMap, {Key, Tid})
+	    end,
 	    ok = ranch:accept_ack(Ref),
 	    ok = Transport:setopts(Socket, [{active, once}]),
 	    gen_server:enter_loop(?MODULE, [],
@@ -204,10 +220,13 @@ debug(Format, Data) ->
 
 %% API.
 
+-spec send(pid(), binary()) -> ok.
 send(Pid, Frame) when is_pid(Pid) ->
     gen_server:cast(Pid, {send, Frame}).
 
 %% internal
+-spec handle_data(binary(), #state{}) ->
+			 ok | {error, closed | inet:posix()}.
 handle_data(<<>>, _State) ->
     ok;
 
@@ -221,26 +240,41 @@ handle_data(Data, State) ->
 	    handle_frame(Frame, Rest, State)
     end.
 
-handle_frame(Frame, <<>>, #state{socket = Socket,
+-spec handle_frame(binary(), binary(), #state{}) -> 
+			  ok | {error, closed | inet:posix()}.
+handle_frame(Frame, <<>>, State) ->
+    handle_frame_helper(Frame, State);
+
+handle_frame(Frame, Rest, State) ->
+    handle_frame_helper(Frame, State),
+    handle_data(Rest, State).
+
+-spec handle_frame_helper(binary(), #state{}) ->
+				 ok | {error, closed | inet:posix()}.
+handle_frame_helper(Frame, #state{socket = Socket,
 				 transport = Transport,
 				 streams = _Streams,
 				 last_good_id = _LastGoodID
 				}) ->
     debug("frame: ~p", [Frame]),
     ok = Transport:setopts(Socket, [{active, once}]),
-    Transport:send(Socket, <<"OK">>);
-
-handle_frame(Frame, Rest, State=#state{socket = Socket,
-				       transport = Transport,
-				       streams = _Streams,
-				       last_good_id = _LastGoodID
-				      }) ->
-    debug("frame: ~p", [Frame]),
-    ok = Transport:setopts(Socket, [{active, once}]),
-    Transport:send(Socket, <<"OK">>),
-    handle_data(Rest, State).
-
+    case serv_spdy:parse_frame(Frame) of
+	#spdy_data{} ->
+	    Transport:send(Socket, <<"OK">>);
+	#spdy_syn_stream{} ->
+	    Transport:send(Socket, <<"OK">>);
+	#spdy_syn_reply{} ->
+	    Transport:send(Socket, <<"OK">>);
+	#spdy_rst_stream{} ->
+	    Transport:send(Socket, <<"OK">>);
+	#spdy_ping{} ->
+	    Transport:send(Socket, <<"OK">>);
+	#spdy_goaway{} ->
+	    Transport:send(Socket, <<"OK">>)
+    end.
 %% send goway frame
+-spec send_goaway(#state{}) ->
+			 ok | {error, closed | inet:posix()}.
 send_goaway(#state{socket = Socket,
 		   transport = Transport,
 		   streams = _Streams,

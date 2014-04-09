@@ -105,12 +105,11 @@ parse_frame(<< 0:1, %% alwalys 0
 	       StreamID:31/big-unsigned-integer,
 	       Flags:8/big-unsigned-integer,
 	       Length:24/big-unsigned-integer,
-	       Data:Length/binary,
-	       Rest/binary>>) ->
-    {#spdy_data{stream_id = StreamID,
+	       Data:Length/binary >>) ->
+    #spdy_data{stream_id = StreamID,
 		flags = Flags,
-		data = Data},
-     Rest};
+		data = Data};
+
 %% 2.2.1 Control frames
 
 %% +----------------------------------+
@@ -127,15 +126,14 @@ parse_frame(<< 1:1, %% always 1
 	       Type:16/big-unsigned-integer,
 	       Flags:8/big-unsigned-integer,
 	       Length:24/big-unsigned-integer,
-	       Data:Length/binary,
-	       Rest/binary >>) ->
+	       Data:Length/binary >>) ->
     SpdyControl= #spdy_control{
 		     version = Version,
 		     type = Type,
 		     flags = Flags,
 		     length = Length,
 		     data = Data},
-    {parse_control_frame(SpdyControl), Rest};
+    parse_control_frame(SpdyControl);
 
 parse_frame(_) ->
     undefined.

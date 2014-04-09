@@ -75,7 +75,8 @@ init([]) ->
 		    Restart, Shutdown, Type, [ranch_sup]},
     ListenerSpec = ranch:child_spec(serv, 5,
 				    ranch_tcp, [{port, 9999}],
-				    serv_session, [SessionMap]),
+				    serv_session, 
+				    [{serv_session_map, SessionMap}]),
     {ok, {SupFlags, [RanchSupSpec, ListenerSpec]}}.
 
 %%%===================================================================
