@@ -58,8 +58,13 @@
 			{ok, ConnectionPid :: pid()}
 			    | {error, Reason :: any()}.
 start_link(Ref, Socket, Transport, Opts) ->
-    proc_lib:start_link(?MODULE, init,
-			[Ref, Socket, Transport, Opts, self()]).
+    case proplists:get_value(serv_session_map, Opts) of
+	undefined ->
+	    {error, "not session map ets table"};
+	SessionMap ->
+	    proc_lib:start_link(?MODULE, init,
+				[Ref, Socket, Transport, SessionMap, self()])
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -83,12 +88,10 @@ init([]) ->
 -spec init(Ref :: ranch:ref(),
 	   Socket :: any(),
 	   Transport :: module(),
-	   Options :: any(),
-	   Parent :: pid()) ->
-		  {ok, ConnectionPid :: pid()} | {error, Reason :: any()}.
-init(Ref, Socket, Transport, Opts, Parent) ->
+	   SessionMap :: any(),
+	   Parent :: pid()) -> any().
+init(Ref, Socket, Transport, SessionMap, Parent) ->
     ok = proc_lib:init_ack(Parent, {ok, self()}),
-    MaybeServSession = lists:keyfind(serv_session_map, 1, Opts),
     case Transport:peername(Socket) of
 	{ok, Key} ->
 	    Tid = ets:new(?SERVER, []),
@@ -96,12 +99,7 @@ init(Ref, Socket, Transport, Opts, Parent) ->
 			       last_good_id = 0,
 			       ping_id = 0},
 	    true = ets:insert(Tid, {session, Session}),
-	    case MaybeServSession of
-		false ->
-		    not_happend_here;
-		{serv_session_map, SessionMap} ->
-		    ets:insert(SessionMap, {Key, Tid})
-	    end,
+	    true = ets:insert(SessionMap, {Key, Tid}),
 	    ok = ranch:accept_ack(Ref),
 	    ok = Transport:setopts(Socket, [{active, once}]),
 	    gen_server:enter_loop(?MODULE, [],
@@ -109,7 +107,8 @@ init(Ref, Socket, Transport, Opts, Parent) ->
 					 transport = Transport,
 					 session = Session
 					},
-				  ?TIMEOUT);
+				  ?TIMEOUT),
+	    ok;
 	{error, Reason} ->
 	    {error, Reason}
     end.
@@ -255,10 +254,7 @@ handle_frame(Frame, Rest, State) ->
 
 -spec handle_frame_helper(binary(), #state{}) ->
 				 ok | {error, closed | inet:posix()}.
-handle_frame_helper(Frame, State = #state {
-				      socket = Socket,
-				      transport = Transport
-				     }) ->
+handle_frame_helper(Frame, State) ->
     debug("frame: ~p", [Frame]),
     case serv_spdy:parse_frame(Frame) of
 	#spdy_data{} ->
@@ -273,12 +269,13 @@ handle_frame_helper(Frame, State = #state {
 		   id = Id} ->
 	    case Id band 1 of
 		1 ->
-		   send_goaway(State);
+		    send_goaway(State);
 		_ ->
 		    send_server_ping(State)
 	    end;
 	#spdy_goaway{} ->
-	    send_server_ping(State);
+	    %% send_server_ping(State);
+	    ok;
 	_ ->
 	    send_goaway(State)
     end.
