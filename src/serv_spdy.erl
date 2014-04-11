@@ -75,7 +75,7 @@ goaway_status_name(_) ->
 %% split date, got frame
 -spec split_data(binary()) -> {true, binary(), binary()} | false.
 split_data(Data = << _:40, Length:24, _/binary >>)
-  when size(Data) >= Length + 8 ->
+  when byte_size(Data) >= Length + 8 ->
     Length2 = Length + 8,
     << Frame:Length2/binary, Rest/binary >> = Data,
     {true, Frame, Rest};
@@ -301,7 +301,7 @@ parse_control_frame(#spdy_control{
 build_frame(#spdy_data{stream_id = StreamID,
 		       flags = Flags,
 		       data = Data}) ->
-	    Length = size(Data),
+	    Length = byte_size(Data),
 	    << 0:1, StreamID:31/big-unsigned-integer,
 	       Flags:8/big-unsigned-integer,
 	       Length:24/big-unsigned-integer,
@@ -427,7 +427,7 @@ build_frame(_) ->
 				binary().
 
 build_control_frame(Version = $l, Type, Flags, Data) ->
-    Length = size(Data),
+    Length = byte_size(Data),
     <<1:1, Version:15/big-unsigned-integer,
       Type:16/big-unsigned-integer,
       Flags:8/big-unsigned-integer,

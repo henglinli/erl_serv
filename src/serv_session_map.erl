@@ -12,7 +12,7 @@
 
 %% API
 -export([start_link/0]).
--export([ref/0, clear/0]).
+-export([tid/0, clear/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -136,8 +136,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec ref() -> ets:tid() | atom().
-ref() ->
+-spec tid() -> ets:tid() | atom().
+tid() ->
     gen_server:call(?SERVER, ref).
 
 -spec clear() -> boolean().

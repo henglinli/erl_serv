@@ -30,16 +30,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    case serv_session_map:start_link() of
-	{ok, Pid} ->
-	    lager:info("serv session map started: ~p", [Pid]),
-	    supervisor:start_link({local, ?SERVER}, ?MODULE, []);
-	ignore ->
-	    supervisor:start_link({local, ?SERVER}, ?MODULE, []);
-	{error, Error} ->
-	    lager:error("serv session map start error: ~p", [Error]),
-	    {error, Error}
-    end.
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -69,15 +60,18 @@ init([]) ->
     Shutdown = 2000,
     Type = supervisor,
 
-    SessionMap = serv_session_map:ref(),
+    ServSessionMapSpec = {serv_session_map,
+			  {serv_session_map, start_link, []},
+			  Restart, Shutdown, worker,
+			  [serv_session_map]},
 
     RanchSupSpec = {ranch_sup, {ranch_sup, start_link, []},
 		    Restart, Shutdown, Type, [ranch_sup]},
     ListenerSpec = ranch:child_spec(serv, 5,
 				    ranch_tcp, [{port, 9999}],
-				    serv_session, 
-				    [{serv_session_map, SessionMap}]),
-    {ok, {SupFlags, [RanchSupSpec, ListenerSpec]}}.
+				    serv_session,
+				    []),
+    {ok, {SupFlags, [ServSessionMapSpec, RanchSupSpec, ListenerSpec]}}.
 
 %%%===================================================================
 %%% Internal functions

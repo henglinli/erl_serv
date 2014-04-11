@@ -24,7 +24,7 @@
 
 -define(SERVER, ?MODULE).
 
--define(TIMEOUT, 50000).
+-define(TIMEOUT, 5000).
 
 -record(state, {last_good_id :: integer(),
 		client_ping_id :: integer(),
@@ -65,8 +65,8 @@ start_link() ->
 init(_Args) ->
     SomeHostInNet = "localhost", % to make it runnable on one machine
     case gen_tcp:connect(SomeHostInNet, 9999,
-			 [{active, true},
-			  {send_timeout, 5000}
+			 [{send_timeout, ?TIMEOUT},
+			  {mode, binary}
 			 ]) of
 	{error, Reason} ->
 	    {stop, Reason};
@@ -113,8 +113,7 @@ handle_call(#request{command = Command,
     end;
 
 handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State, ?TIMEOUT}.
+    {noreply, State, ?TIMEOUT}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -126,11 +125,13 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(stop, _State) ->
-    {stop, normal, _State};
+handle_cast(stop, State = #state{socket = Socket
+		    }) ->
+    ok = gen_tcp:close(Socket),
+    {stop, normal, State};
 
-handle_cast(_Msg, _State) ->
-    {stop, normal, _State}.
+handle_cast(_Msg, State) ->
+    {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -143,6 +144,7 @@ handle_cast(_Msg, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
+    debug("recv timeout"),
     {noreply, State, hibernate};
 
 handle_info(Info, #state{} = State) ->
@@ -151,8 +153,10 @@ handle_info(Info, #state{} = State) ->
 	    handle_data(Socket, Data),
 	    {noreply, State, ?TIMEOUT};
 	{tcp_closed, _Socket} ->
+	    debug("connection closed", []),
 	    {stop, normal, State};
 	{tcp_error, _Socket, Reason} ->
+	    debug("connection error: ~p", [Reason]),
 	    {stop, Reason, State}
     end;
 
@@ -170,8 +174,9 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, #state{socket = Socket
+		      }) ->
+    gen_tcp:close(Socket).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -189,6 +194,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %% utils
+debug(Data) ->
+    error_logger:info_msg(Data).
+
 debug(Format, Data) ->
     error_logger:info_msg(Format, Data).
 
@@ -212,7 +220,7 @@ handle_data(Socket, Data) ->
     case serv_spdy:split_data(Data) of
 	false ->
 	    debug("illegal frame: ~p", [Data]),
-	    send_goaway(Socket);
+	    send_goaway(goaway_protocol_error, Socket);
 	{true, Frame, Rest} ->
 	    handle_frame(Socket, Frame, Rest)
     end.
@@ -243,31 +251,38 @@ handle_frame_helper(Socket, Frame) ->
 	    send_client_ping(Socket);
 	#spdy_ping{version = $l,
 		   id = Id} ->
-	    debug("ping: ~p", [Id]),
+	    debug("ping, id: ~p", [Id]),
 	    case Id band 1 of
 		1 ->
-		    send_goaway(Socket);
+		    send_goaway(goaway_protocol_error, Socket);
 		_ ->
-		    send_goaway(Socket)
+		    ok
+		%%send_goaway(Socket)
 	    end;
-	#spdy_goaway{} ->
-	    send_client_ping(Socket);
+	#spdy_goaway{version = $l,
+		     last_good_id = LastGoodID,
+		     status_code = StatusCode
+		    } ->
+	    debug("goaway, status code: ~p, last good id: ~p",
+		  [serv_spdy:goaway_status_name(StatusCode), LastGoodID]),
+	    % stop self
+	    gen_server:cast(?SERVER, stop);
 	_ ->
-	    send_goaway(Socket)
+	    send_goaway(goaway_protocol_error, Socket)
     end.
 
 %% send goway frame
--spec send_goaway(Socket :: gen_tcp:socket()) ->
+-spec send_goaway(Status :: atom(), Socket :: gen_tcp:socket()) ->
 			 ok | {error, closed | inet:posix()}.
-send_goaway(Socket) ->
+send_goaway(Status, Socket) ->
     LastGoodID = 0,
     Reply = serv_spdy:build_frame(
 	      #spdy_goaway{
 		 version = $l,
 		 last_good_id = LastGoodID,
 		 status_code =
-		     serv_spdy:goaway_status_code(
-		       goaway_protocol_error)}),
+		     serv_spdy:goaway_status_code(Status)
+		}),
     gen_tcp:send(Socket, Reply).
 
 

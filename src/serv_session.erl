@@ -57,14 +57,10 @@
 		 Options :: any()) ->
 			{ok, ConnectionPid :: pid()}
 			    | {error, Reason :: any()}.
-start_link(Ref, Socket, Transport, Opts) ->
-    case proplists:get_value(serv_session_map, Opts) of
-	undefined ->
-	    {error, "not session map ets table"};
-	SessionMap ->
-	    proc_lib:start_link(?MODULE, init,
-				[Ref, Socket, Transport, SessionMap, self()])
-    end.
+start_link(Ref, Socket, Transport, Options) ->
+    proc_lib:start_link(?MODULE, init,
+			[Ref, Socket, Transport, Options, erlang:self()]).
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -88,30 +84,23 @@ init([]) ->
 -spec init(Ref :: ranch:ref(),
 	   Socket :: any(),
 	   Transport :: module(),
-	   SessionMap :: any(),
+	   Options :: term(),
 	   Parent :: pid()) -> any().
-init(Ref, Socket, Transport, SessionMap, Parent) ->
-    ok = proc_lib:init_ack(Parent, {ok, self()}),
-    case Transport:peername(Socket) of
-	{ok, Key} ->
-	    Tid = ets:new(?SERVER, []),
-	    Session = #session{streams = [],
-			       last_good_id = 0,
-			       ping_id = 0},
-	    true = ets:insert(Tid, {session, Session}),
-	    true = ets:insert(SessionMap, {Key, Tid}),
-	    ok = ranch:accept_ack(Ref),
-	    ok = Transport:setopts(Socket, [{active, once}]),
-	    gen_server:enter_loop(?MODULE, [],
-				  #state{socket = Socket,
-					 transport = Transport,
-					 session = Session
-					},
-				  ?TIMEOUT),
-	    ok;
-	{error, Reason} ->
-	    {error, Reason}
-    end.
+init(Ref, Socket, Transport, _Options, Parent) ->
+    SelfPid = erlang:self(),
+    ok = proc_lib:init_ack(Parent, {ok, SelfPid}),
+    Session = #session{streams = [],
+		       last_good_id = 0,
+		       ping_id = 0},
+    true = ets:insert(serv_session_map:tid(), {SelfPid, Session}),
+    ok = ranch:accept_ack(Ref),
+    ok = Transport:setopts(Socket, [{active, once}]),
+    gen_server:enter_loop(?MODULE, [],
+			  #state{socket = Socket,
+				 transport = Transport,
+				 session = Session
+				},
+			  ?TIMEOUT).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -170,6 +159,7 @@ handle_info(timeout, State) ->
     %% Transport:send(Socket, <<"noreply">>),
     %% {noreply, State, ?TIMEOUT};
     %% {stop, normal, State};
+    debug("recv timeout, hibernate."),
     {noreply, State, hibernate};
 
 handle_info(Info, State = #state {
@@ -200,8 +190,11 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, #state{socket = Socket,
+			  transport = Transport
+			 }) ->
+    true = ets:delete(serv_session_map:tid(), erlang:self()),
+    Transport:close(Socket).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -219,13 +212,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %% utils
+debug(Data) ->
+    lager:info(Data).
+
 debug(Format, Data) ->
     lager:info(Format, Data).
 
 %% API.
 
 -spec send(pid(), binary()) -> ok.
-send(Pid, Frame) when is_pid(Pid) ->
+send(Pid, Frame) when erlang:is_pid(Pid) ->
     gen_server:cast(Pid, {send, Frame}).
 
 %% internal
@@ -238,7 +234,7 @@ handle_data(Data, State) ->
     case serv_spdy:split_data(Data) of
 	false ->
 	    debug("data: ~p", [Data]),
-	    send_goaway(State);
+	    send_goaway(goaway_protocol_error, State);
 	{true, Frame, Rest} ->
 	    handle_frame(Frame, Rest, State)
     end.
@@ -255,7 +251,6 @@ handle_frame(Frame, Rest, State) ->
 -spec handle_frame_helper(binary(), #state{}) ->
 				 ok | {error, closed | inet:posix()}.
 handle_frame_helper(Frame, State) ->
-    debug("frame: ~p", [Frame]),
     case serv_spdy:parse_frame(Frame) of
 	#spdy_data{} ->
 	    send_server_ping(State);
@@ -267,17 +262,18 @@ handle_frame_helper(Frame, State) ->
 	    send_server_ping(State);
 	#spdy_ping{version = $l,
 		   id = Id} ->
+	    debug("ping, id: ~p", [Id]),
 	    case Id band 1 of
 		1 ->
-		    send_goaway(State);
+		    send_server_ping(State);
 		_ ->
-		    send_server_ping(State)
+		    send_goaway(goaway_ok, State)
 	    end;
 	#spdy_goaway{} ->
 	    %% send_server_ping(State);
 	    ok;
 	_ ->
-	    send_goaway(State)
+	    send_goaway(goaway_protocol_error, State)
     end.
 
 -spec send_reply(Socket :: any(),
@@ -294,9 +290,10 @@ send_reply(Socket, Transport, Frame) ->
     Transport:send(Socket, Frame).
 
 %% send goway frame
--spec send_goaway(#state{}) ->
+-spec send_goaway(Status :: atom(), State :: #state{}) ->
 			 ok | {error, closed | inet:posix()}.
-send_goaway(#state{socket = Socket,
+send_goaway(Status,
+	    #state{socket = Socket,
 		   transport = Transport,
 		   session = #session {
 				last_good_id = LastGoodID
@@ -307,8 +304,8 @@ send_goaway(#state{socket = Socket,
 		 version = $l,
 		 last_good_id = LastGoodID,
 		 status_code =
-		     serv_spdy:goaway_status_code(
-		       goaway_protocol_error)}),
+		     serv_spdy:goaway_status_code(Status)
+		}),
     send_reply(Socket, Transport, Reply).
 
 -spec send_server_ping(#state{}) ->
