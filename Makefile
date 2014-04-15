@@ -4,14 +4,14 @@ ESCRIPT = /usr/local/bin/escript
 
 all: compile generate
 
-compile: deps
+compile:
 	${ESCRIPT} ./rebar compile
 
 generate:
 	${ESCRIPT} ./rebar -r generate
 
 deps:
-	${ESCRIPT} ./rebar get-deps
+	${ESCRIPT} ./rebar refresh-deps
 
 clean:
 	${ESCRIPT} ./rebar clean

@@ -257,7 +257,6 @@ handle_frame_helper(Socket, Frame) ->
 		    send_goaway(goaway_protocol_error, Socket);
 		_ ->
 		    ok
-		%%send_goaway(Socket)
 	    end;
 	#spdy_goaway{version = $l,
 		     last_good_id = LastGoodID,
@@ -276,6 +275,7 @@ handle_frame_helper(Socket, Frame) ->
 			 ok | {error, closed | inet:posix()}.
 send_goaway(Status, Socket) ->
     LastGoodID = 0,
+    debug("goway, last good id: ", [LastGoodID]),
     Reply = serv_spdy:build_frame(
 	      #spdy_goaway{
 		 version = $l,

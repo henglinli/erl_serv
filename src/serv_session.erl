@@ -39,6 +39,13 @@
 		session :: #session{}
 	       }).
 
+-ifndef(NDEBUG).
+-define(DEBUG(Data), lager:info(Data)).
+-define(DEBUG(Format, Data), lager:info(Format, Data)).
+-else.
+-define(DEBUG(_Data), true).
+-define(DEBUG(_Format, _Data), true).
+-endif.
 
 %%%===================================================================
 %%% API
@@ -131,19 +138,19 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({send, Frame},
-	    #state{socket = Socket,
-		   transport = Transport,
-		   session = #session {
-				streams = _Streams,
-				last_good_id = _LastGoodID,
-				ping_id = _ServerPingId
-			       }
+	    State = #state{socket = Socket,
+		   transport = Transport
 		  }) ->
     ok = Transport:setopts(Socket, [{active, once}]),
-    Transport:send(Socket, Frame);
+    case Transport:send(Socket, Frame) of
+	 ok ->
+	    {noreply, State, ?TIMEOUT};
+	{error, Reason} ->
+	    {stop, Reason, State}
+    end;
 
 handle_cast(_Request, State) ->
-    {noreply, State}.
+    {noreply, State, ?TIMEOUT}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -156,20 +163,39 @@ handle_cast(_Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
-    %% Transport:send(Socket, <<"noreply">>),
-    %% {noreply, State, ?TIMEOUT};
-    %% {stop, normal, State};
-    debug("recv timeout, hibernate."),
+    ?DEBUG("recv timeout, hibernate."),
     {noreply, State, hibernate};
 
 handle_info(Info, State = #state {
-			     transport = Transport
+			     socket = Socket,
+			     transport = Transport,
+			     session = Session
 			    }) ->
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
-	    handle_data(Data, State),
-	    {noreply, State, ?TIMEOUT};
+	    case handle_data(Data, Session) of
+		{Reply = #spdy_goaway{}, _Session} ->
+		    ok = Transport:setopts(Socket, [{active, once}]),
+		    case Transport:send(Socket, Reply) of
+			ok ->
+			    {stop, normal, State};
+			{error, Reason} ->
+			    {stop, Reason, State}
+		    end;
+		{Reply, NewSession} ->
+		    ok = Transport:setopts(Socket, [{active, once}]),
+		    case Transport:send(Socket, Reply) of
+			ok ->
+			    {noreply, #state {
+					 socket = Socket,
+					 transport = Transport,
+					 session = NewSession
+					}, ?TIMEOUT};
+			{error, Reason} ->
+			    {stop, Reason, State}
+		    end
+	    end;
 	{Closed, _Socket} ->
 	    {stop, normal, State};
 	{Error, _Socket, Reason} ->
@@ -211,94 +237,88 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%% utils
-debug(Data) ->
-    lager:info(Data).
-
-debug(Format, Data) ->
-    lager:info(Format, Data).
-
 %% API.
-
 -spec send(pid(), binary()) -> ok.
 send(Pid, Frame) when erlang:is_pid(Pid) ->
     gen_server:cast(Pid, {send, Frame}).
 
 %% internal
--spec handle_data(binary(), #state{}) ->
-			 ok | {error, closed | inet:posix()}.
-handle_data(<<>>, _State) ->
-    ok;
-
-handle_data(Data, State) ->
+-spec handle_data(Data :: binary(), Session :: #session{}) ->
+			 {Replay :: #spdy_data{}
+				  | #spdy_syn_stream{}
+				  | #spdy_syn_reply{}
+				  | #spdy_rst_stream{}
+				  | #spdy_ping{}
+				  | #spdy_goaway{},
+			  NewSession :: #session{}}.
+handle_data(Data, Session = #session{
+			       last_good_id = LastGoodID
+			      }) ->
     case serv_spdy:split_data(Data) of
 	false ->
-	    debug("data: ~p", [Data]),
-	    send_goaway(goaway_protocol_error, State);
+	    ?DEBUG("data: ~p", [Data]),
+	    Reply = serv_spdy:build_frame(
+		      #spdy_goaway{
+			 version = $l,
+			 last_good_id = LastGoodID,
+			 status_code =
+			     serv_spdy:goaway_status_code(goaway_protocol_error)
+			}),
+	    {Reply, Session};
 	{true, Frame, Rest} ->
-	    handle_frame(Frame, Rest, State)
+	    handle_frame(Frame, Rest, Session)
     end.
 
--spec handle_frame(binary(), binary(), #state{}) ->
-			  ok | {error, closed | inet:posix()}.
-handle_frame(Frame, <<>>, State) ->
-    handle_frame_helper(Frame, State);
+-spec handle_frame(Frame :: binary(), Rest :: binary(), Session :: #session{}) ->
+			  {Replay :: #spdy_data{}
+				   | #spdy_syn_stream{}
+				   | #spdy_syn_reply{}
+				   | #spdy_rst_stream{}
+				   | #spdy_ping{}
+				   | #spdy_goaway{},
+			   NewSession :: #session{}}.
+handle_frame(Frame, <<>>, Session) ->
+    handle_frame_helper(Frame, Session);
 
-handle_frame(Frame, Rest, State) ->
-    handle_frame_helper(Frame, State),
-    handle_data(Rest, State).
+handle_frame(Frame, Rest, Session) ->
+    handle_frame_helper(Frame, Session),
+    handle_data(Rest, Session).
 
--spec handle_frame_helper(binary(), #state{}) ->
-				 ok | {error, closed | inet:posix()}.
-handle_frame_helper(Frame, State) ->
+-spec handle_frame_helper(Frame :: binary(), Session :: #session{}) ->
+				 {Replay :: #spdy_data{}
+					  | #spdy_syn_stream{}
+					  | #spdy_syn_reply{}
+					  | #spdy_rst_stream{}
+					  | #spdy_ping{}
+					  | #spdy_goaway{},
+				  NewSession :: #session{}}.
+handle_frame_helper(Frame, Session) ->
     case serv_spdy:parse_frame(Frame) of
 	#spdy_data{} ->
-	    send_server_ping(State);
+	    handle_undefined(Session);
 	#spdy_syn_stream{} ->
-	    send_server_ping(State);
+	    handle_undefined(Session);
 	#spdy_syn_reply{} ->
-	    send_server_ping(State);
+	    handle_undefined(Session);
 	#spdy_rst_stream{} ->
-	    send_server_ping(State);
+	    handle_undefined(Session);
 	#spdy_ping{version = $l,
-		   id = Id} ->
-	    debug("ping, id: ~p", [Id]),
-	    case Id band 1 of
-		1 ->
-		    send_server_ping(State);
-		_ ->
-		    send_goaway(goaway_ok, State)
-	    end;
+		   id = PingId} ->
+	    ?DEBUG("ping, id: ~p", [PingId]),
+	    handle_client_ping(PingId, Session);
 	#spdy_goaway{} ->
-	    %% send_server_ping(State);
-	    ok;
+	    handle_undefined(Session);
 	_ ->
-	    send_goaway(goaway_protocol_error, State)
+	    handle_undefined(Session)
     end.
 
--spec send_reply(Socket :: any(),
-		 Transport :: module(),
-		 #spdy_data{}
-		 | #spdy_syn_stream{}
-		 | #spdy_syn_reply{}
-		 | #spdy_rst_stream{}
-		 | #spdy_ping{}
-		 | #spdy_goaway{}) ->
-			ok | {error, closed | inet:posix()}.
-send_reply(Socket, Transport, Frame) ->
-    ok = Transport:setopts(Socket, [{active, once}]),
-    Transport:send(Socket, Frame).
-
-%% send goway frame
--spec send_goaway(Status :: atom(), State :: #state{}) ->
-			 ok | {error, closed | inet:posix()}.
-send_goaway(Status,
-	    #state{socket = Socket,
-		   transport = Transport,
-		   session = #session {
-				last_good_id = LastGoodID
-			       }
-		  }) ->
+-spec goaway(Status :: atom(), Session :: #session{}) ->
+		   {Reply :: #spdy_goaway{},
+		    NewSession :: #session{}}.
+goaway(Status, Session = #session {
+		 last_good_id = LastGoodID
+		}) ->
+    ?DEBUG("goway, last good id: ", [LastGoodID]),
     Reply = serv_spdy:build_frame(
 	      #spdy_goaway{
 		 version = $l,
@@ -306,31 +326,33 @@ send_goaway(Status,
 		 status_code =
 		     serv_spdy:goaway_status_code(Status)
 		}),
-    send_reply(Socket, Transport, Reply).
+    {Reply, Session}.
 
--spec send_server_ping(#state{}) ->
-			      ok | {error, closed | inet:posix()}.
-send_server_ping(#state{socket = Socket,
-			transport = Transport,
-			session = #session {
-				     streams = _Streams,
-				     last_good_id = _LastGoodID,
-				     ping_id = ServerPingId
-				    }
-		       }) ->
+-spec handle_undefined(Session :: #session{}) ->
+			      {Reply :: #spdy_goaway{},
+			       NewSession :: #session{}}.
+handle_undefined(Session) ->
+    goaway(goaway_protocol_error, Session).
 
-    Reply = serv_spdy:build_frame(
-	      #spdy_ping{version = $l,
-			 id = ServerPingId}),
-    send_reply(Socket, Transport, Reply).
 
-%% %% create session, not used yet
-%% -spec create_session(Tid :: ets:tid() | atom()) -> true.
-%% create_session(Tid) ->
-%%     ets:insert(Tid, {session, #session{
-%%				 streams = [],
-%%				 last_good_id = 0,
-%%				 ping_id = 0}}).
-%% -spec create_ping_counter(Tid :: ets:tid() | atom()) -> true.
-%% create_ping_counter(Tid) ->
-%%     ets:insert(Tid, {ping_id, 0}).
+-spec handle_client_ping(PingId :: integer(), Session :: #session{}) ->
+				{Reply :: #spdy_ping{}
+					| #spdy_goaway{},
+				 NewSession :: #session{}}.
+handle_client_ping(PingId, Session = #session {
+					streams = Streams,
+					last_good_id = LastGoodID,
+					ping_id = ServerPingId
+				       }) ->
+    case PingId band 1 of
+	1 ->
+	    Reply = serv_spdy:build_frame(
+		      #spdy_ping{version = $l,
+				 id = ServerPingId}),
+	    {Reply, #session {
+		       streams = Streams,
+		       last_good_id = LastGoodID,
+		       ping_id = ServerPingId + 2}};
+	_ ->
+	    goaway(goaway_protocol_error, Session)
+    end.
