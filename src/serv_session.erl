@@ -10,7 +10,7 @@
 
 -author('HenryLee<henglinli@gmail.com>').
 
--include("serv_spdy.hrl").
+-include("serv_pb.hrl").
 
 -behaviour(gen_server).
 
@@ -175,8 +175,9 @@ handle_info(Info, State = #state {
     case Info of
 	{OK, _Socket, Data} ->
 	    ?DEBUG(Data),
+	    Reply = <<"hello">>, %handle_request(Data),
 	    ok = Transport:setopts(Socket, [{active, once}]),
-	    case Transport:send(Socket, Data) of
+	    case Transport:send(Socket, Reply) of
 		ok ->
 		    {noreply, State, ?TIMEOUT};
 		{error, Reason} ->
@@ -227,3 +228,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec send(pid(), binary()) -> ok.
 send(Pid, Frame) when erlang:is_pid(Pid) ->
     gen_server:cast(Pid, {send, Frame}).
+
+-spec handle_request(any()) -> any().
+handle_request(_Data) ->
+    #info_response {server_version = "1"}.

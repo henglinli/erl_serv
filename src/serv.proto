@@ -18,8 +18,8 @@ message pb_pair {
     optional bytes value = 2;
 }
 
-// // auth
-// message auth_request {
-//   required bytes user = 1;
-//   required bytes password = 2;
-// }
+// auth
+message auth_request {
+  required bytes user = 1;
+  required bytes password = 2;
+}

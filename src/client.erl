@@ -10,6 +10,8 @@
 
 -behaviour(gen_server).
 
+-include("serv_pb.hrl").
+
 %% API
 -export([start_link/0]).
 -export([start/0]).
@@ -95,7 +97,9 @@ handle_call(#request{command = Command,
 	   ) ->
     case Command of
 	ping ->
-	    case gen_tcp:send(Socket, <<"ping">>) of
+	    Ping = #info_response{node = erlang:node()},
+	    %BPing = erlang:term_to_binary(Ping),
+	    case gen_tcp:send(Socket, Ping) of
 		{error, Reason} ->
 		    {stop, Reason, State};
 		ok ->

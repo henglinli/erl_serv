@@ -22,3 +22,11 @@
 }).
 -endif.
 
+-ifndef(AUTH_REQUEST_PB_H).
+-define(AUTH_REQUEST_PB_H, true).
+-record(auth_request, {
+    user = erlang:error({required, user}),
+    password = erlang:error({required, password})
+}).
+-endif.
+
