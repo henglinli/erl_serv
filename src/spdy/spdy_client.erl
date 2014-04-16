@@ -6,9 +6,11 @@
 %%% @end
 %%% Created : 10 Apr 2014 by  <lee@lee>
 %%%-------------------------------------------------------------------
--module(client).
+-module(spdy_client).
 
 -behaviour(gen_server).
+
+-include("serv_spdy.hrl").
 
 %% API
 -export([start_link/0]).
@@ -24,7 +26,9 @@
 
 -define(TIMEOUT, 5000).
 
--record(state, {socket :: gen_tcp:socket()
+-record(state, {last_good_id :: integer(),
+		client_ping_id :: integer(),
+		socket :: gen_tcp:socket()
 	       }).
 
 -record(request, {command::atom(), data::binary()}).
@@ -62,14 +66,15 @@ init(_Args) ->
     SomeHostInNet = "localhost", % to make it runnable on one machine
     case gen_tcp:connect(SomeHostInNet, 9999,
 			 [{send_timeout, ?TIMEOUT},
-			  {mode, binary},
-			  {packet, 2}
+			  {mode, binary}
 			 ]) of
 	{error, Reason} ->
 	    {stop, Reason};
 	{ok, Socket} ->
 	    %% gen_tcp:controlling_process(Socket, self()),
-	    {ok, #state{socket = Socket
+	    {ok, #state{last_good_id = 0,
+			client_ping_id = 1,
+			socket = Socket
 		       }, ?TIMEOUT}
     end.
 
@@ -90,12 +95,14 @@ init(_Args) ->
 handle_call(#request{command = Command,
 		     data = _Data},
 	    _From,
-	    #state{socket = Socket
+	    #state{last_good_id = _LastGoodID,
+		   client_ping_id = _ClientPingId,
+		   socket = Socket
 		  } = State
 	   ) ->
     case Command of
 	ping ->
-	    case gen_tcp:send(Socket, <<"ping">>) of
+	    case send_client_ping(Socket) of
 		{error, Reason} ->
 		    {stop, Reason, State};
 		ok ->
@@ -206,5 +213,95 @@ ping() ->
 
 -spec handle_data(Socket :: gen_tcp:socket(), Packet :: binary()) ->
 			 ok | {error, closed | inet:posix()}.
-handle_data(_Socket, Data) ->
-    debug("recved: ~p", [Data]).
+handle_data(_, <<>>) ->
+    ok;
+
+handle_data(Socket, Data) ->
+    case serv_spdy:split_data(Data) of
+	false ->
+	    debug("illegal frame: ~p", [Data]),
+	    send_goaway(goaway_protocol_error, Socket);
+	{true, Frame, Rest} ->
+	    handle_frame(Socket, Frame, Rest)
+    end.
+
+-spec handle_frame(Socket :: gen_tcp:socket(),
+		   Frame :: binary(),
+		   Rest :: binary()) ->
+			  ok | {error, closed | inet:posix()}.
+handle_frame(Socket, Frame, <<>>) ->
+    handle_frame_helper(Socket, Frame);
+
+handle_frame(Socket, Frame, Rest) ->
+    handle_frame_helper(Socket, Frame),
+    handle_data(Socket, Rest).
+
+-spec handle_frame_helper(Socket :: gen_tcp:socket(),
+			  Frame :: binary()) ->
+				 ok | {error, closed | inet:posix()}.
+handle_frame_helper(Socket, Frame) ->
+    case serv_spdy:parse_frame(Frame) of
+	#spdy_data{} ->
+	    send_client_ping(Socket);
+	#spdy_syn_stream{} ->
+	    send_client_ping(Socket);
+	#spdy_syn_reply{} ->
+	    send_client_ping(Socket);
+	#spdy_rst_stream{} ->
+	    send_client_ping(Socket);
+	#spdy_ping{version = $l,
+		   id = Id} ->
+	    debug("ping, id: ~p", [Id]),
+	    case Id band 1 of
+		1 ->
+		    send_goaway(goaway_protocol_error, Socket);
+		_ ->
+		    ok
+	    end;
+	#spdy_goaway{version = $l,
+		     last_good_id = LastGoodID,
+		     status_code = StatusCode
+		    } ->
+	    debug("goaway, status code: ~p, last good id: ~p",
+		  [serv_spdy:goaway_status_name(StatusCode), LastGoodID]),
+	    % stop self
+	    gen_server:cast(?SERVER, stop);
+	_ ->
+	    send_goaway(goaway_protocol_error, Socket)
+    end.
+
+%% send goway frame
+-spec send_goaway(Status :: atom(), Socket :: gen_tcp:socket()) ->
+			 ok | {error, closed | inet:posix()}.
+send_goaway(Status, Socket) ->
+    LastGoodID = 0,
+    debug("goway, last good id: ", [LastGoodID]),
+    Reply = serv_spdy:build_frame(
+	      #spdy_goaway{
+		 version = $l,
+		 last_good_id = LastGoodID,
+		 status_code =
+		     serv_spdy:goaway_status_code(Status)
+		}),
+    gen_tcp:send(Socket, Reply).
+
+
+-spec send_client_ping(Socket :: gen_tcp:socket()) ->
+			      ok | {error, closed | inet:posix()}.
+send_client_ping(Socket) ->
+    ClientPingId = client_ping_id(),
+    Reply = serv_spdy:build_frame(
+	      #spdy_ping{version = $l,
+			 id = ClientPingId}),
+    gen_tcp:send(Socket, Reply).
+
+-spec client_ping_id() -> integer().
+client_ping_id() ->
+    case erlang:get(last_good_id) of
+	undefined ->
+	    erlang:put(last_good_id, 1),
+	    1;
+	Value ->
+	    erlang:put(last_good_id, Value + 2),
+	    Value
+    end.
