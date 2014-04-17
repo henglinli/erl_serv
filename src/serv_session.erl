@@ -29,14 +29,13 @@
 
 -define(TIMEOUT, 5000).
 
--record(session, {streams :: [integer()],
-		  last_good_id = 0 :: integer(),
-		  ping_id = 0 :: integer()
+-record(session, {user::[byte() | bitstring()],
+		  token::non_neg_integer()
 		 }).
 
--record(state, {socket :: any(),
-		transport :: module(),
-		session :: #session{}
+-record(state, {socket::any(),
+		transport::module(),
+		session::#session{}
 	       }).
 
 -ifndef(NDEBUG).
@@ -84,21 +83,19 @@ start_link(Ref, Socket, Transport, Options) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
--spec init(Options :: any()) -> {ok, undefined}.
+-spec init(Options::any()) -> {ok, undefined}.
 init([]) ->
     {ok, undefined}.
 
--spec init(Ref :: ranch:ref(),
-	   Socket :: any(),
-	   Transport :: module(),
-	   Options :: term(),
-	   Parent :: pid()) -> any().
+-spec init(Ref::ranch:ref(),
+	   Socket::any(),
+	   Transport::module(),
+	   Options::term(),
+	   Parent::pid()) -> any().
 init(Ref, Socket, Transport, _Options, Parent) ->
     SelfPid = erlang:self(),
     ok = proc_lib:init_ack(Parent, {ok, SelfPid}),
-    Session = #session{streams = [],
-		       last_good_id = 0,
-		       ping_id = 0},
+    Session = #session{},
     true = ets:insert(serv_session_map:tid(), {SelfPid, Session}),
     ok = ranch:accept_ack(Ref),
     ok = Transport:setopts(Socket, [{active, once}]),
@@ -248,7 +245,8 @@ handle_packet(Packet) ->
 
 -spec handle_request(Request::undefined
 			    | info_request
-			    | #auth_request{}) ->
+			    | #auth_request{}
+			    | #chat{}) ->
 			    Response::binary().
 handle_request(undefined) ->
     serv_pb_codec:encode(
@@ -259,6 +257,17 @@ handle_request(info_request) ->
     serv_pb_codec:encode(
       #info_response{node = erlang:atom_to_binary(erlang:node(), utf8),
 		     server_version = <<"1">>});
+handle_request(#auth_request{user = User,
+			    password = Password}) ->
+    serv_pb_codec:encode(
+      #error_response{errmsg = <<"OK">>,
+		      errcode = 1});
+
+handle_request(#chat{}) ->
+     serv_pb_codec:encode(
+      #error_response{errmsg = <<"not implement">>,
+		      errcode = 2});
+
 handle_request(_) ->
     serv_pb_codec:encode(
       #error_response{errmsg = <<"not implement">>,

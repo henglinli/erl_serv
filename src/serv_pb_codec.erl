@@ -41,6 +41,7 @@ msg_type(0) -> error_response;
 msg_type(1) -> info_request;
 msg_type(2) -> info_response;
 msg_type(3) -> auth_request;
+msg_type(4) -> chat;
 msg_type(_) -> undefined.
 
 %% @doc Converts a symbolic message name into a message code. Replaces
@@ -50,6 +51,7 @@ msg_code(error_response) -> 0;
 msg_code(info_request) -> 1;
 msg_code(info_response) -> 2;
 msg_code(auth_request) -> 3;
+msg_code(chat) -> 4;
 msg_code(_) -> 255.
 
 %% @doc Selects the appropriate PB decoder for a message code.

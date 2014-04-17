@@ -30,3 +30,13 @@
 }).
 -endif.
 
+-ifndef(CHAT_PB_H).
+-define(CHAT_PB_H, true).
+-record(chat, {
+    from = erlang:error({required, from}),
+    to = erlang:error({required, to}),
+    time = erlang:error({required, time}),
+    msg = erlang:error({required, msg})
+}).
+-endif.
+

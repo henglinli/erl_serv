@@ -23,3 +23,11 @@ message auth_request {
   required bytes user = 1;
   required bytes password = 2;
 }
+
+// chat
+message chat {
+  required bytes from = 1;
+  required bytes to = 2;
+  required uint32 time = 3;
+  required bytes msg = 4;
+}
