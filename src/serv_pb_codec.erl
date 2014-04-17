@@ -13,6 +13,7 @@
          to_binary/1,   %% riakc_pb:binary
          to_list/1     %% riakc_pb:any_to_list
         ]).
+-export([parse_packat/1]).
 
 %% @doc Create an iolist of msg code and protocol buffer
 %% message. Replaces `riakc_pb:encode/1'.
@@ -37,25 +38,23 @@ decode(MsgCode, MsgData) ->
 %% name. Replaces `riakc_pb:msg_type/1'.
 -spec msg_type(integer()) -> atom().
 msg_type(0) -> error_response;
-msg_type(1) -> ping_request;
-msg_type(2) -> pong_response;
-msg_type(3) -> info_request;
-msg_type(4) -> info_response;
+msg_type(1) -> info_request;
+msg_type(2) -> info_response;
+msg_type(3) -> auth_request;
 msg_type(_) -> undefined.
 
 %% @doc Converts a symbolic message name into a message code. Replaces
 %% `riakc_pb:msg_code/1'.
 -spec msg_code(atom()) -> integer().
 msg_code(error_response) -> 0;
-msg_code(ping_request) -> 1;
-msg_code(pong_response) -> 2;
-msg_code(info_request) -> 3;
-msg_code(info_response) -> 4;
+msg_code(info_request) -> 1;
+msg_code(info_response) -> 2;
+msg_code(auth_request) -> 3;
 msg_code(_) -> 255.
 
 %% @doc Selects the appropriate PB decoder for a message code.
 -spec decoder_for(pos_integer()) -> module().
-decoder_for(_N) -> riakc_pb.
+decoder_for(_N) -> serv_pb.
 
 %% @doc Selects the appropriate PB encoder for a given message name.
 -spec encoder_for(atom()) -> module().
@@ -111,3 +110,13 @@ encode_pair({K,V}) ->
 -spec decode_pair(#pb_pair{}) -> {string(), string()}.
 decode_pair(#pb_pair{key = K, value = V}) ->
     {K, V}.
+
+-spec parse_packat(Packet::binary()) ->
+			 undefined | {MsgCode::integer(), MsgData::binary()}.
+parse_packat(<<MsgCode:8/big-unsigned-integer,
+		       MsgData/binary>>) ->
+    {MsgCode, MsgData};
+parse_packat(_) ->
+    undefined.
+
+

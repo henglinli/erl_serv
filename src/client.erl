@@ -15,7 +15,7 @@
 %% API
 -export([start_link/0]).
 -export([start/0]).
--export([ping/0]).
+-export([info/0]).
 -export([stop/0]).
 
 %% gen_server callbacks
@@ -70,9 +70,7 @@ init(_Args) ->
 	{error, Reason} ->
 	    {stop, Reason};
 	{ok, Socket} ->
-	    %% gen_tcp:controlling_process(Socket, self()),
-	    {ok, #state{socket = Socket
-		       }, ?TIMEOUT}
+	    {ok, #state{socket = Socket}, ?TIMEOUT}
     end.
 
 %%--------------------------------------------------------------------
@@ -96,21 +94,19 @@ handle_call(#request{command = Command,
 		  } = State
 	   ) ->
     case Command of
-	ping ->
-	    Ping = #info_response{node = erlang:node()},
-	    %BPing = erlang:term_to_binary(Ping),
-	    case gen_tcp:send(Socket, Ping) of
+	info ->
+	    case gen_tcp:send(Socket, info_packet()) of
 		{error, Reason} ->
 		    {stop, Reason, State};
 		ok ->
-		    {reply, ok, State, ?TIMEOUT}
+		    {reply, ok, State}
 	    end;
 	_ ->
 	    {noreply, State}
     end;
 
 handle_call(_Request, _From, State) ->
-    {noreply, State, ?TIMEOUT}.
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -122,7 +118,8 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(stop, State = #state{socket = Socket
+handle_cast(stop, State =
+		#state{socket = Socket
 		    }) ->
     ok = gen_tcp:close(Socket),
     {stop, normal, State};
@@ -147,8 +144,17 @@ handle_info(timeout, State) ->
 handle_info(Info, #state{} = State) ->
     case Info of
 	{tcp, Socket, Data} ->
-	    handle_data(Socket, Data),
-	    {noreply, State, ?TIMEOUT};
+	    case handle_packet(Data) of
+		noreply ->
+		    {noreply, State};
+		Reply ->
+		    case gen_tcp:send(Socket, Reply) of
+			{error, Reason} ->
+			    {stop, Reason, State};
+			ok ->
+			    {noreply, State}
+		    end
+	    end;
 	{tcp_closed, _Socket} ->
 	    debug("connection closed", []),
 	    {stop, normal, State};
@@ -171,8 +177,9 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{socket = Socket
+terminate(Reason, #state{socket = Socket
 		      }) ->
+    debug("terminate: ~p", [Reason]),
     gen_tcp:close(Socket).
 
 %%--------------------------------------------------------------------
@@ -192,23 +199,35 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% utils
 debug(Data) ->
-    error_logger:info_msg(Data).
+    lager:info(Data).
 
 debug(Format, Data) ->
-    error_logger:info_msg(Format, Data).
+    lager:info(Format, Data).
 
 start() ->
+    lager:start(),
     start_link().
 
 stop() ->
     gen_server:cast(?SERVER, stop).
 
-ping() ->
+info() ->
     gen_server:call(?SERVER,
-		    #request{command = ping
+		    #request{command = info
 			    }).
 
--spec handle_data(Socket :: gen_tcp:socket(), Packet :: binary()) ->
-			 ok | {error, closed | inet:posix()}.
-handle_data(_Socket, Data) ->
-    debug("recved: ~p", [Data]).
+-spec handle_packet(Packet::binary()) ->
+			   Reply::noreply | binary().
+handle_packet(Packet) ->
+    case serv_pb_codec:parse_packat(Packet) of
+	undefined ->
+	    debug("recved: [~p]", [Packet]),
+	    noreply;
+	{MsgCode, MsgData} ->
+	    Response = serv_pb_codec:decode(MsgCode, MsgData),
+	    debug("recved: [~p:~p]", [MsgCode, Response]),
+	    noreply
+    end.
+
+info_packet()->
+    serv_pb_codec:encode(info_request).

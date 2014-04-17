@@ -144,13 +144,13 @@ handle_cast({send, Frame},
     ok = Transport:setopts(Socket, [{active, once}]),
     case Transport:send(Socket, Frame) of
 	ok ->
-	    {noreply, State, ?TIMEOUT};
+	    {noreply, State};
 	{error, Reason} ->
 	    {stop, Reason, State}
     end;
 
 handle_cast(_Request, State) ->
-    {noreply, State, ?TIMEOUT}.
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -174,14 +174,17 @@ handle_info(Info, State = #state {
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
-	    ?DEBUG(Data),
-	    Reply = <<"hello">>, %handle_request(Data),
-	    ok = Transport:setopts(Socket, [{active, once}]),
-	    case Transport:send(Socket, Reply) of
-		ok ->
-		    {noreply, State, ?TIMEOUT};
-		{error, Reason} ->
-		    {stop, Reason, State}
+	    case handle_packet(Data) of
+		noreply ->
+		    {noreply, State};
+		Reply ->
+		    ok = Transport:setopts(Socket, [{active, once}]),
+		    case gen_tcp:send(Socket, Reply) of
+			{error, Reason} ->
+			    {stop, Reason, State};
+			ok ->
+			    {noreply, State}
+		    end
 	    end;
 	{Closed, _Socket} ->
 	    {stop, normal, State};
@@ -229,6 +232,34 @@ code_change(_OldVsn, State, _Extra) ->
 send(Pid, Frame) when erlang:is_pid(Pid) ->
     gen_server:cast(Pid, {send, Frame}).
 
--spec handle_request(any()) -> any().
-handle_request(_Data) ->
-    #info_response {server_version = "1"}.
+-spec handle_packet(Packet::binary()) -> Reply::noreply | binary().
+handle_packet(Packet) ->
+    case serv_pb_codec:parse_packat(Packet) of
+	undefined ->
+	    ?DEBUG("recved: [~p]", [Packet]),
+	    serv_pb_codec:encode(
+	      #error_response{errmsg = <<"bad packet">>,
+			      errcode = 1});
+	{MsgCode, MsgData} ->
+	    Request = serv_pb_codec:decode(MsgCode, MsgData),
+	    ?DEBUG("recved: [~p:~p]", [MsgCode, Request]),
+	    handle_request(Request)
+    end.
+
+-spec handle_request(Request::undefined
+			    | info_request
+			    | #auth_request{}) ->
+			    Response::binary().
+handle_request(undefined) ->
+    serv_pb_codec:encode(
+      #error_response{errmsg = <<"bad packet">>,
+		      errcode = 1});
+
+handle_request(info_request) ->
+    serv_pb_codec:encode(
+      #info_response{node = erlang:atom_to_binary(erlang:node(), utf8),
+		     server_version = <<"1">>});
+handle_request(_) ->
+    serv_pb_codec:encode(
+      #error_response{errmsg = <<"not implement">>,
+		      errcode = 2}).
