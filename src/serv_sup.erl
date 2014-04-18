@@ -64,6 +64,10 @@ init([]) ->
 			  {serv_session_map, start_link, []},
 			  Restart, Shutdown, worker,
 			  [serv_session_map]},
+    ServChatSpec = {serv_chat,
+		    {serv_chat, start_link, []},
+		    Restart, Shutdown, worker,
+		    [serv_chat]},
 
     RanchSupSpec = {ranch_sup, {ranch_sup, start_link, []},
 		    Restart, Shutdown, Type, [ranch_sup]},
@@ -71,7 +75,10 @@ init([]) ->
 				    ranch_tcp, [{port, 9999}, {packet, 2}],
 				    serv_session,
 				    []),
-    {ok, {SupFlags, [ServSessionMapSpec, RanchSupSpec, ListenerSpec]}}.
+    {ok, {SupFlags, [ServSessionMapSpec,
+		     ServChatSpec,
+		     RanchSupSpec,
+		     ListenerSpec]}}.
 
 %%%===================================================================
 %%% Internal functions

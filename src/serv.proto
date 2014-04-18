@@ -6,7 +6,7 @@ message error_response {
     required uint32 errcode = 2;
 }
 
-// server info, not request, just send code 
+// server info, not request, just send code
 message info_response {
     optional bytes node = 1;
     optional bytes server_version = 2;

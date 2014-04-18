@@ -17,8 +17,6 @@
 %% API
 -export([start_link/4]).
 
--export([send/2]).
-
 %% gen_server callbacks
 -export([init/5]).
 
@@ -29,7 +27,8 @@
 
 -define(TIMEOUT, 5000).
 
--record(session, {user::[byte() | bitstring()],
+-record(session, {pid::pid(),
+		  user::[byte() | bitstring()],
 		  token::non_neg_integer()
 		 }).
 
@@ -90,7 +89,7 @@ init([]) ->
 -spec init(Ref::ranch:ref(),
 	   Socket::any(),
 	   Transport::module(),
-	   Options::term(),
+	   Options::any(),
 	   Parent::pid()) -> any().
 init(Ref, Socket, Transport, _Options, Parent) ->
     SelfPid = erlang:self(),
@@ -134,12 +133,13 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({send, Frame},
+handle_cast({send, Chat = #chat{}},
 	    State = #state{socket = Socket,
-		   transport = Transport
+			   transport = Transport
 			  }) ->
+    Reply = serv_pb_codec:encode(Chat),
     ok = Transport:setopts(Socket, [{active, once}]),
-    case Transport:send(Socket, Frame) of
+    case Transport:send(Socket, Reply) of
 	ok ->
 	    {noreply, State};
 	{error, Reason} ->
@@ -166,21 +166,34 @@ handle_info(timeout, State) ->
 handle_info(Info, State = #state {
 			     socket = Socket,
 			     transport = Transport,
-			     session = _Session
+			     session = Session
 			    }) ->
     {OK, Closed, Error} = Transport:messages(),
     case Info of
 	{OK, _Socket, Data} ->
-	    case handle_packet(Data) of
-		noreply ->
+	    case handle_packet(Data, Session) of
+		{noreply, nochange} ->
 		    {noreply, State};
-		Reply ->
+		{noreply, NewSession} ->
+		    {noreply,
+		     #state{socket = Socket,
+			    transport = Transport,
+			    session = NewSession}};
+		{Reply, NewSession} ->
 		    ok = Transport:setopts(Socket, [{active, once}]),
 		    case gen_tcp:send(Socket, Reply) of
 			{error, Reason} ->
 			    {stop, Reason, State};
 			ok ->
-			    {noreply, State}
+			    case NewSession of
+				nochange ->
+				    {noreply, State};
+				    _ ->
+				    {noreply,
+				     #state{socket = Socket,
+					    transport = Transport,
+					    session = NewSession}}
+			    end
 		    end
 	    end;
 	{Closed, _Socket} ->
@@ -225,50 +238,71 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %% API.
--spec send(pid(), binary()) -> ok.
-send(Pid, Frame) when erlang:is_pid(Pid) ->
-    gen_server:cast(Pid, {send, Frame}).
 
--spec handle_packet(Packet::binary()) -> Reply::noreply | binary().
-handle_packet(Packet) ->
+-spec handle_packet(Packet::binary(), Session::#session{}) ->
+			   {Reply::noreply | binary(),
+			    NewSession::nochange | #session{}}.
+handle_packet(Packet, Session) ->
     case serv_pb_codec:parse_packat(Packet) of
 	undefined ->
 	    ?DEBUG("recved: [~p]", [Packet]),
-	    serv_pb_codec:encode(
-	      #error_response{errmsg = <<"bad packet">>,
-			      errcode = 1});
+	    Reply = serv_pb_codec:encode(
+		      #error_response{errmsg = <<"bad packet">>,
+				      errcode = 1}),
+	    {Reply, nochange};
 	{MsgCode, MsgData} ->
 	    Request = serv_pb_codec:decode(MsgCode, MsgData),
 	    ?DEBUG("recved: [~p:~p]", [MsgCode, Request]),
-	    handle_request(Request)
+	    handle_request(Request, Session)
     end.
 
 -spec handle_request(Request::undefined
 			    | info_request
 			    | #auth_request{}
-			    | #chat{}) ->
-			    Response::binary().
-handle_request(undefined) ->
-    serv_pb_codec:encode(
-      #error_response{errmsg = <<"bad packet">>,
-		      errcode = 1});
+			    | #chat{},
+		    Session::#session{}) ->
+			    {Response::binary(), NewSession::#session{}}.
+handle_request(undefined, _Session) ->
+    Response = serv_pb_codec:encode(
+		 #error_response{errmsg = <<"bad packet">>,
+				 errcode = 1}),
+    {Response, nochange};
 
-handle_request(info_request) ->
-    serv_pb_codec:encode(
-      #info_response{node = erlang:atom_to_binary(erlang:node(), utf8),
-		     server_version = <<"1">>});
+handle_request(info_request, _Session) ->
+    Response = serv_pb_codec:encode(
+		 #info_response{node = erlang:atom_to_binary(erlang:node(), utf8),
+				server_version = <<"1">>}),
+    {Response, nochange};
+
 handle_request(#auth_request{user = User,
-			    password = Password}) ->
-    serv_pb_codec:encode(
-      #error_response{errmsg = <<"OK">>,
-		      errcode = 1});
+			    password = _Password}, Session) ->
+    true = ets:insert(serv_session_map:tid(), {User, self()}),
+    Response = serv_pb_codec:encode(
+		 #error_response{errmsg = <<"OK">>,
+				 errcode = 1}),
+    NewSession = Session#session{user = User},
+    {Response, NewSession};
 
-handle_request(#chat{}) ->
-     serv_pb_codec:encode(
-      #error_response{errmsg = <<"not implement">>,
-		      errcode = 2});
+handle_request(#chat{from = From,
+		     to = To,
+		     msg = Msg
+		 }, Session) ->
+    case From == Session#session.user of
+	true ->
+	    gen_server:cast(#chat{from = From,
+				  to = To,
+				  time = utils:now(),
+				  msg = Msg}),
+	    {noreply, nochange};
+	false ->
+	    Response = serv_pb_codec:encode(
+			 #error_response{errmsg = <<"not from you">>,
+					 errcode = 3}),
+	    {Response, nochange}
+    end;
 
-handle_request(_) ->
-    serv_pb_codec:encode(
-      #error_response{errmsg = <<"not implement">>,
-		      errcode = 2}).
+handle_request(_, _) ->
+    Response = serv_pb_codec:encode(
+		 #error_response{errmsg = <<"not implement">>,
+				 errcode = 2}),
+    {Response, nochange}.
