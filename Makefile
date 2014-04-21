@@ -10,7 +10,7 @@ compile:
 deps:
 	${ESCRIPT} $(REBAR) get-deps
 
-generate:
+generate: compile
 	${ESCRIPT} $(REBAR) generate
 
 clean:
@@ -20,6 +20,3 @@ clean:
 
 distclean: clean
 	${ESCRIPT} ./rebar delete-deps
-
-DIALYZER_APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools \
-	 crypto inets webtool public_key mnesia eunit syntax_tools compiler
