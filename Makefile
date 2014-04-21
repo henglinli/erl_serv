@@ -1,20 +1,20 @@
 .PHONY: deps test
-
+REBAR = $(shell pwd)/rebar
 ESCRIPT = /usr/local/bin/escript
 
-all: compile generate
+all: deps compile
 
 compile:
-	${ESCRIPT} ./rebar compile
-
-generate:
-	${ESCRIPT} ./rebar -r generate
+	${ESCRIPT} $(REBAR) compile
 
 deps:
-	${ESCRIPT} ./rebar refresh-deps
+	${ESCRIPT} $(REBAR) get-deps
+
+generate:
+	${ESCRIPT} $(REBAR) generate
 
 clean:
-	${ESCRIPT} ./rebar clean
+	${ESCRIPT} $(REBAR) clean
 	@rm -rf *~
 	@rm -rf rel/serv
 
