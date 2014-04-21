@@ -1,11 +1,13 @@
+%% -*- erlang -*-
 {application, serv,
  [
-  {description, "thrift base erlang rpc server"},
+  {description, "riak_core based app"},
   {vsn, "0.0.1"},
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  riak_core
                  ]},
   {mod, { serv_app, []}},
   {env, []}
