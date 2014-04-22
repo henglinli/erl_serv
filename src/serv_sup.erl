@@ -20,8 +20,6 @@ start_link() ->
 %% ===================================================================
 
 init(_Args) ->
-    EntryRoute = {["serv", "ping"], serv_wm_ping, []},
-    webmachine_router:add_route(EntryRoute),
     VMaster = { serv_vnode_master,
                   {riak_core_vnode_master, start_link, [serv_vnode]},
                   permanent, 5000, worker, [riak_core_vnode_master]},

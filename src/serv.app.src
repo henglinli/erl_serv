@@ -5,10 +5,11 @@
   {vsn, "0.0.1"},
   {registered, []},
   {applications, [
-                  kernel,
-                  stdlib,
-                  riak_core
-                 ]},
+		  kernel,
+		  stdlib,
+		  riak_core,
+		  webmachine
+		 ]},
   {mod, { serv_app, []}},
   {env, []}
  ]}.
