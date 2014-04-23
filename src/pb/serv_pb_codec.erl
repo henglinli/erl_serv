@@ -3,16 +3,16 @@
 -include("serv_pb.hrl").
 
 -export([encode/1,      %% riakc_pb:encode
-         decode/2,      %% riakc_pb:decode
-         msg_type/1,    %% riakc_pb:msg_type
-         msg_code/1,    %% riakc_pb:msg_code
-         encode_pair/1, %% riakc_pb:pbify_rpbpair
-         decode_pair/1, %% riakc_pb:erlify_rpbpair
-         encode_bool/1, %% riakc_pb:pbify_bool
-         decode_bool/1, %% riakc_pb:erlify_bool
-         to_binary/1,   %% riakc_pb:binary
-         to_list/1     %% riakc_pb:any_to_list
-        ]).
+	 decode/2,      %% riakc_pb:decode
+	 msg_type/1,    %% riakc_pb:msg_type
+	 msg_code/1,    %% riakc_pb:msg_code
+	 encode_pair/1, %% riakc_pb:pbify_rpbpair
+	 decode_pair/1, %% riakc_pb:erlify_rpbpair
+	 encode_bool/1, %% riakc_pb:pbify_bool
+	 decode_bool/1, %% riakc_pb:erlify_bool
+	 to_binary/1,   %% riakc_pb:binary
+	 to_list/1     %% riakc_pb:any_to_list
+	]).
 -export([parse_packat/1]).
 
 %% @doc Create an iolist of msg code and protocol buffer
@@ -120,5 +120,3 @@ parse_packat(<<MsgCode:8/big-unsigned-integer,
     {MsgCode, MsgData};
 parse_packat(_) ->
     undefined.
-
-

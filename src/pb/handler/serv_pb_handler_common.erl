@@ -6,10 +6,10 @@
 %%% @end
 %%% Created : 22 Apr 2014 by  <lee@lee>
 %%%-------------------------------------------------------------------
--module(serv_common_handler).
+-module(serv_pb_handler_common).
+-author('HenryLee<henglinli@gmail.com>').
 
 -include("serv_pb.hrl").
-
 -include("serv.hrl").
 
 -behaviour(serv_handler).

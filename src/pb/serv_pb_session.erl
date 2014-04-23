@@ -6,7 +6,7 @@
 %%% @end
 %%% Created :  8 Apr 2014 by  <lee@lee>
 %%%-------------------------------------------------------------------
--module(serv_session).
+-module(serv_pb_session).
 -author('HenryLee<henglinli@gmail.com>').
 
 -include("serv.hrl").
@@ -16,13 +16,14 @@
 
 %% API
 -export([start_link/4]).
--export([register_handler/2]).
 
 %% gen_server callbacks
 -export([init/5]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
+
+-export([register_handlers/1]).
 
 -define(SERVER, ?MODULE).
 
@@ -36,9 +37,9 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
--spec register_handler(MsgCode :: pos_integer(), Service :: module()) -> ok.
-register_handler(MsgCode, Service) ->
-    erlang:put(MsgCode, Service),
+-spec register_handlers(Handlers :: [term()]) -> ok.
+register_handlers(Handlers) ->
+    erlang:put(handlers, Handlers),
     ok.
 
 %%--------------------------------------------------------------------
@@ -230,10 +231,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %% API.
--spec lookup_handler(MsgCode :: pos_integer()) ->
+-spec lookup_handler(MsgCode :: pos_integer()) -> 
 			    Module :: module() | undefined.
 lookup_handler(MsgCode) ->
-    erlang:get(MsgCode).
+    case erlang:get(handlers) of
+	undefined ->
+	    undefined; 
+	Handlers ->
+	    proplists:get_value(MsgCode, Handlers)
+    end.
 
 -spec handle_packet(Packet::binary(), Session::#session{}) ->
 			   {Reply::noreply | binary(),

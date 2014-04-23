@@ -1,28 +1,27 @@
 %%%-------------------------------------------------------------------
-%%% @author  <lee@lee>
+%%% @author  Henry Lee <henglinli@gmail.com>
 %%% @copyright (C) 2014,
 %%% @doc
 %%%
 %%% @end
-%%% Created : 18 Apr 2014 by  <lee@lee>
+%%% Created :  8 Apr 2014 by Henry Lee <henglinli@gmail.com>
 %%%-------------------------------------------------------------------
--module(serv_chat_handler).
+-module(serv_pb_session_map).
+-author('HenryLee<henglinli@gmail.com>').
 
 -behaviour(gen_server).
--behaviour(serv_handler).
 
--include("serv_pb.hrl").
--include("serv.hrl").
 %% API
 -export([start_link/0]).
--export([handle_request/2]).
+-export([tid/0, clear/0]).
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {tid::ets:tid() | atom()}).
 
 %%%===================================================================
 %%% API
@@ -54,7 +53,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{}}.
+    Options = [public, {write_concurrency, true}, {read_concurrency, true}],
+    Tid = ets:new(?SERVER, Options),
+    {ok, #state{tid = Tid}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -70,6 +71,9 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call(ref, _From, #state{tid = Tid} = State) ->
+    {reply, Tid, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -84,6 +88,10 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast(clear,  #state{tid = Tid} = State) ->
+    ets:delete_all_objects(Tid),
+    {noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -129,13 +137,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handle_request(#chat{}, Session :: #session{}) ->
-			    {noreply, nochange}.
-handle_request(Chat = #chat{to = To}, _) ->
-    case ets:lookup(serv_session_map:tid(), To) of
-	[] ->
-	    {noreply, nochange};
-	[{_, Pid}] ->
-	    gen_server:cast(Pid, {send, Chat}),
-	    {noreply, nochange}
-    end.
+-spec tid() -> ets:tid() | atom().
+tid() ->
+    gen_server:call(?SERVER, ref).
+
+-spec clear() -> boolean().
+clear() ->
+    gen_server:cast(?SERVER, clear).

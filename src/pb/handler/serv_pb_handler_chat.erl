@@ -6,15 +6,17 @@
 %%% @end
 %%% Created : 18 Apr 2014 by  <lee@lee>
 %%%-------------------------------------------------------------------
--module(serv_chat).
+-module(serv_pb_handler_chat).
+-author('HenryLee<henglinli@gmail.com>').
 
 -behaviour(gen_server).
+-behaviour(serv_pb_handler).
 
 -include("serv_pb.hrl").
-
+-include("serv.hrl").
 %% API
 -export([start_link/0]).
-
+-export([handle_request/2]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
@@ -83,10 +85,6 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(Chat = #chat{}, State) ->
-    handle_chat(Chat),
-    {noreply, State};
-
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -132,14 +130,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handle_chat(#chat{}) -> ok.
-handle_chat(Chat = #chat{to = To}) ->
+-spec handle_request(#chat{}, Session :: #session{}) ->
+			    {noreply, nochange}.
+handle_request(Chat = #chat{to = To}, _) ->
     case ets:lookup(serv_session_map:tid(), To) of
 	[] ->
-	    ok;
+	    {noreply, nochange};
 	[{_, Pid}] ->
-	    gen_server:cast(Pid, {send, Chat})
-    end;
-
-handle_chat(_) ->
-    ok.
+	    gen_server:cast(Pid, {send, Chat}),
+	    {noreply, nochange}
+    end.
