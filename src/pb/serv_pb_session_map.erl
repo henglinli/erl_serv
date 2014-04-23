@@ -9,19 +9,28 @@
 -module(serv_pb_session_map).
 -author('HenryLee<henglinli@gmail.com>').
 
+-include("serv_pb_session_map.hrl").
+
 -behaviour(gen_server).
 
 %% API
 -export([start_link/0]).
--export([tid/0, clear/0]).
+
+-export([session_map_est/0,
+	 handlers_ets/0
+	]).
+
+-export([register_handler/2,
+	 lookup_handler/1
+	]).
+
+-export([handlers/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
-
--record(state, {tid::ets:tid() | atom()}).
 
 %%%===================================================================
 %%% API
@@ -52,10 +61,11 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+%% session map
 init([]) ->
-    Options = [public, {write_concurrency, true}, {read_concurrency, true}],
-    Tid = ets:new(?SERVER, Options),
-    {ok, #state{tid = Tid}}.
+    ?ETS_SESSION_MAP_NAME = ets:new(?ETS_SESSION_MAP_NAME, ?ETS_SESSION_MAP_OPTS),
+
+    {ok, undefined}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -71,9 +81,6 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(ref, _From, #state{tid = Tid} = State) ->
-    {reply, Tid, State};
-
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -88,10 +95,6 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast(clear,  #state{tid = Tid} = State) ->
-    ets:delete_all_objects(Tid),
-    {noreply, State};
-
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -136,11 +139,38 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec session_map_est() -> undefined | ets:tab().
+session_map_est() ->
+    case ets:info(?ETS_SESSION_MAP_NAME) of
+	undefined ->
+	    undefined;
+	List when is_list(List) ->
+	    ?ETS_SESSION_MAP_NAME
+    end.
 
--spec tid() -> ets:tid() | atom().
-tid() ->
-    gen_server:call(?SERVER, ref).
+-spec handlers_ets() -> undefined | ets:tab().
+handlers_ets() ->
+    case ets:info(?ETS_SERV_HANDLERS_NAME) of
+    	undefined ->
+    	    undefined;
+    	List when is_list(List) ->
+    	    ?ETS_SERV_HANDLERS_NAME
+    end.
 
--spec clear() -> boolean().
-clear() ->
-    gen_server:cast(?SERVER, clear).
+-spec register_handler(pos_integer(), module()) -> true.
+register_handler(MsgCode, Service) ->
+    ets:insert(?ETS_SERV_HANDLERS_NAME, {MsgCode, Service}).
+
+-spec lookup_handler(pos_integer()) -> undefined | module().
+lookup_handler(MsgCode) ->
+    case ets:lookup(?ETS_SESSION_MAP_NAME, MsgCode) of
+	[] ->
+	    undefined;
+	[Tuple] ->
+	    {MsgCode, Service} = Tuple,
+	    Service
+    end.
+
+-spec handlers() -> [ module() ].
+handlers() ->
+    ets:tab2list(?ETS_SERV_HANDLERS_NAME).

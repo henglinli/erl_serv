@@ -1,3 +1,3 @@
 erl_serv
 =======
-   _erl_serv_ -- protobuf based bilateral rpc server powered by ranch.
+   _erl_serv_ -- riak_core based server OTP app.
