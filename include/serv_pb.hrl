@@ -1,16 +1,8 @@
--ifndef(ERROR_RESPONSE_PB_H).
--define(ERROR_RESPONSE_PB_H, true).
--record(error_response, {
+-ifndef(RESPONSE_PB_H).
+-define(RESPONSE_PB_H, true).
+-record(response, {
     errmsg = erlang:error({required, errmsg}),
     errcode = erlang:error({required, errcode})
-}).
--endif.
-
--ifndef(INFO_RESPONSE_PB_H).
--define(INFO_RESPONSE_PB_H, true).
--record(info_response, {
-    node,
-    server_version
 }).
 -endif.
 
@@ -22,9 +14,9 @@
 }).
 -endif.
 
--ifndef(AUTH_REQUEST_PB_H).
--define(AUTH_REQUEST_PB_H, true).
--record(auth_request, {
+-ifndef(AUTH_PB_H).
+-define(AUTH_PB_H, true).
+-record(auth, {
     user = erlang:error({required, user}),
     password = erlang:error({required, password})
 }).

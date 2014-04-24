@@ -1,15 +1,9 @@
 // HenryLee<henglinli@gmail.com>
 
 // Error response - may be generated for any Req
-message error_response {
+message response {
     required bytes errmsg = 1;
     required uint32 errcode = 2;
-}
-
-// server info, not request, just send code
-message info_response {
-    optional bytes node = 1;
-    optional bytes server_version = 2;
 }
 
 // pair
@@ -19,7 +13,7 @@ message pb_pair {
 }
 
 // auth
-message auth_request {
+message auth {
   required bytes user = 1;
   required bytes password = 2;
 }

@@ -37,10 +37,10 @@ decode(MsgCode, MsgData) ->
 %% @doc Converts a message code into the symbolic message
 %% name. Replaces `riakc_pb:msg_type/1'.
 -spec msg_type(integer()) -> atom().
-msg_type(0) -> error_response;
-msg_type(1) -> info_request;
-msg_type(2) -> info_response;
-msg_type(3) -> auth_request;
+msg_type(0) -> response;
+msg_type(1) -> ping;
+msg_type(2) -> pong;
+msg_type(3) -> auth;
 msg_type(4) -> chat;
 msg_type(254) -> start_tls;
 msg_type(_) -> undefined.
@@ -48,10 +48,10 @@ msg_type(_) -> undefined.
 %% @doc Converts a symbolic message name into a message code. Replaces
 %% `riakc_pb:msg_code/1'.
 -spec msg_code(atom()) -> integer().
-msg_code(error_response) -> 0;
-msg_code(info_request) -> 1;
-msg_code(info_response) -> 2;
-msg_code(auth_request) -> 3;
+msg_code(response) -> 0;
+msg_code(ping) -> 1;
+msg_code(pong) -> 2;
+msg_code(auth) -> 3;
 msg_code(chat) -> 4;
 msg_code(start_tls) -> 254;
 msg_code(_) -> 255.

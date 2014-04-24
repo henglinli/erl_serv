@@ -9,26 +9,37 @@
 -module(serv_pb_server).
 -author('HenryLee<henglinli@gmail.com>').
 
+-include("serv.hrl").
+-include("serv_pb.hrl").
+
 -behaviour(gen_fsm).
 
 %% API
 -export([start_link/0]).
 
 %% gen_fsm callbacks
--export([init/1, state_name/2, state_name/3, handle_event/3,
+-export([init/1, handle_event/3,
 	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+
+-export([ready/2, ready/3, 
+	 reply/2, reply/3, 
+	 reply_then_stop/2, reply_then_stop/3,
+	 wait/2, wait/3]).
+
+-export([set_socket/2]).
 
 -define(SERVER, ?MODULE).
 
 -record(state, {transport = {gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
 		socket :: port() | ssl:sslsocket(),   % socket
-		req,                % current request
+		request,                % current request
 		handlers :: [term()],
 		peername :: undefined | {inet:ip_address(), pos_integer()},
 		common_name :: undefined | string(),
 		security,
 		retries = 3,
-		inbuffer = <<>> % when an incomplete message comes in, we have to unpack it ourselves
+		response = <<>> :: binary(),
+		session = #session{}
 	       }).
 
 %%%===================================================================
@@ -44,7 +55,7 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() -> {ok, pid()} | ignore | {error, term()}
+-spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 start_link() ->
     gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
 
@@ -70,11 +81,11 @@ set_socket(Pid, Socket) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
--spec init(list()) -> {ok, wait_for_socket, #state{}}.
+-spec init(list()) -> {ok, wait, #state{}}.
 init([]) ->
     serv_stat:update(pbc_connect),
     Handlers = serv_pb_session_map:handlers(),
-    {ok, wait_for_socket, #state{handlers = Handlers}}.
+    {ok, wait, #state{handlers = Handlers}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -91,9 +102,8 @@ init([]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-wait_for_socket(_Event, State) ->
-    {next_state, wait_for_socket, State}.
-
+wait(_Event, State) ->
+    {next_state, wait, State}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -112,7 +122,7 @@ wait_for_socket(_Event, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-wait_for_socket({set_socket, Socket}, _From,
+wait({set_socket, Socket}, _From,
 		State = #state{transport= {_Transport, Control}}
 	       ) ->
     case Control:peername(Socket) of
@@ -120,14 +130,8 @@ wait_for_socket({set_socket, Socket}, _From,
 	    Control:setopts(Socket, [{active, once}]),
 	    %% check if security is enabled, if it is wait for TLS, otherwise go
 	    %% straight into connected state
-	    case riak_core_security:is_enabled() of
-		true ->
-		    {reply, ok, wait_for_tls, State#state{socket=Socket,
-							  peername=PeerInfo}};
-		false ->
-		    {reply, ok, connected, State#state{socket=Socket,
-						       peername=PeerInfo}}
-	    end;
+	    {reply, ok, ready, State#state{socket=Socket,
+					       peername=PeerInfo}};
 	{error, Reason} ->
 	    lager:debug("Could not get PB socket peername: ~p", [Reason]),
 	    %% It's not really "ok", but there's no reason for the
@@ -136,10 +140,51 @@ wait_for_socket({set_socket, Socket}, _From,
 	    {stop, normal, ok, State}
     end;
 
-wait_for_socket(_Event, _From, State) ->
-    {reply, unknown_message, wait_for_socket, State}.
+wait(_Event, _From, State) ->
+    {reply, unknown_message, wait, State}.
 
+ready(timeout, State) ->
+    %% Flush any protocol messages that have been buffering
+    %% todo, send ping
+    {next_state, ready, State};
 
+ready(_Event, State) ->
+    {next_state, ready, State}.
+
+ready(_Event, _From, State) ->
+    {reply, unknown_message, ready, State}.
+
+reply(timeout, State=#state{response=Response,
+			    socket = Socket,
+			    transport = {Transport, _Control}
+			   }) ->
+    case Transport:send(Socket, Response) of
+	ok ->
+	    {next_state, ready, State, 0};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, State}
+    end;
+
+reply(_Event, State) ->
+    {next_state, ready, State}.
+
+reply(_Event, _From, State) ->
+    {reply, unknown_message, ready, State}.
+
+reply_then_stop(timeout, State=#state{response=Response,
+			    socket = Socket,
+			    transport = {Transport, _Control}
+			   }) ->
+    Transport:send(Socket, Response),
+
+    {stop, normal, State};
+
+reply_then_stop(_Event, State) ->
+    {stop, normal, State}.
+
+reply_then_stop(_Event, _From, State) ->
+    {stop, normal, unknown_message, State}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -173,7 +218,7 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event(_Event, _From, StateName, State) ->
-    Reply = ok,
+    Reply = unknown_message,
     {reply, Reply, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -189,8 +234,62 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, StateName, State) ->
-    {next_state, StateName, State}.
+%% @doc The handle_info/3 gen_fsm callback.
+handle_info({tcp_closed, Socket}, _SN, State=#state{socket=Socket}) ->
+    {stop, normal, State};
+
+handle_info({tcp_error, Socket, _Reason}, _SN, State=#state{socket=Socket}) ->
+    {stop, normal, State};
+
+handle_info({tcp, Socket, Packet}, _StateName,
+	    State=#state{request=undefined,
+			 socket=Socket,
+			 handlers=Handlers,
+			 session = Session
+			}) ->
+    case serv_pb_codec:parse_packat(Packet) of
+	undefined ->
+	    lager:debug("recved: [~p]", [Packet]),
+	    Response = serv_pb_codec:encode(
+		      #response{errmsg = <<"bad packet">>,
+				      errcode = 1}),
+	    {next_state, reply, State#state{response = Response}, 0};
+	{MsgCode, MsgData} ->
+	    Request = serv_pb_codec:decode(MsgCode, MsgData),
+	    lager:debug("recved: [~p:~p]", [MsgCode, Request]),
+	    case proplists:get_value(MsgCode, Handlers) of
+		undefined ->
+		    Response = serv_pb_codec:encode(
+				 #response{errmsg = <<"not implement">>,
+						 errcode = 2}),
+		    {next_state, reply, State#state{response = Response}, 0};
+		Handler ->
+		    case Handler:handle_request(Request, Session) of
+			{noreply, nochange} ->
+			    {next_state, ready,
+			     State#state{request=undefined}, 0};
+			_ ->
+			    {next_state, ready,
+			     State#state{request=undefined}, 0}
+		    end
+	    end
+    end;
+
+handle_info({tcp, Socket, _Data}, _SN, State) ->
+    %% req =/= undefined: received a new request while another was in
+    %% progress -> Error
+    lager:debug("Received a new PB socket request"
+		" while another was in progress"),
+    Response = serv_pb_codec:encode(
+		 #response{errmsg = <<"last request not done">>,
+			   errcode = 1}),
+    {next_state, reply_then_stop, State#state{socket = Socket,
+					      response = Response}, 0};
+
+handle_info(Message, StateName, State) ->
+    %% Throw out messages we don't care about, but log them
+    lager:error("Unrecognized message ~p", [Message]),
+    {next_state, StateName, State, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
