@@ -14,14 +14,17 @@ start(_StartType, _StartArgs) ->
     case serv_sup:start_link() of
 	{ok, Pid} ->
 	    ok = riak_core:register(serv, [{vnode_module, serv_vnode}]),
+	    %ok = riak_core_node_watcher:service_up(serv, self()),
+	    %% ok = riak_core_ring_events:add_guarded_handler(serv_ring_event_handler, []),
+	    %% ok = riak_core_node_watcher_events:add_guarded_handler(serv_node_event_handler, []),
+	    ok = riak_core:register(serv, [{vnode_module, serv_vnode_stat}]),
+	    %ok = riak_core_node_watcher:service_up(serv_stat, self()),
 
-	    ok = riak_core_ring_events:add_guarded_handler(serv_ring_event_handler, []),
-	    ok = riak_core_node_watcher_events:add_guarded_handler(serv_node_event_handler, []),
-	    ok = riak_core_node_watcher:service_up(serv, self()),
+	    ok = riak_core:register(serv, [{vnode_module, serv_vnode_entry}]),
+	    %ok = riak_core_node_watcher:service_up(serv_entry, self()),
+	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},
+	    %% webmachine_router:add_route(EntryRoute),
 
-	    EntryRoute = {["serv", "ping"], serv_wm_ping, []},
-	    webmachine_router:add_route(EntryRoute),
-   
 	    {ok, Pid};
 	{error, Reason} ->
 	    {error, Reason}

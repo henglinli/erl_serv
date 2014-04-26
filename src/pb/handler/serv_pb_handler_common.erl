@@ -12,7 +12,7 @@
 -include("serv_pb.hrl").
 -include("serv.hrl").
 
--behaviour(serv_handler).
+-behaviour(serv_pb_handler).
 
 %% API
 -export([handle_request/2]).

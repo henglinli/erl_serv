@@ -27,33 +27,53 @@ init([]) ->
 
     Restart = permanent,
     Shutdown = 2000,
-    Type = supervisor,
+    _Type = supervisor,
 
-    ServSessionMapSpec = {serv_session_map,
-			  {serv_session_map, start_link, []},
-			  Restart, Shutdown, worker,
-			  [serv_session_map]},
+    %% ServSessionMapSpec = {serv_session_map,
+    %%			  {serv_session_map, start_link, []},
+    %%			  Restart, Shutdown, worker,
+    %%			  [serv_session_map]},
 
     %% ServChatSpec = {serv_chat,
-    %% 		    {serv_chat, start_link, []},
-    %% 		    Restart, Shutdown, worker,
-    %% 		    [serv_chat]},
+    %%		    {serv_chat, start_link, []},
+    %%		    Restart, Shutdown, worker,
+    %%		    [serv_chat]},
 
-    RanchSupSpec = {ranch_sup, {ranch_sup, start_link, []},
-		    Restart, Shutdown, Type, [ranch_sup]},
+    %% RanchSupSpec = {ranch_sup, {ranch_sup, start_link, []},
+    %%		    Restart, Shutdown, Type, [ranch_sup]},
 
-    ListenerSpec = ranch:child_spec(serv, 5,
-				    ranch_tcp, [{port, 9999}, {packet, 2}],
-				    serv_session,
-				    []),
+    %% ListenerSpec = ranch:child_spec(serv, 5,
+    %%				    ranch_tcp, [{port, 9999}, {packet, 2}],
+    %%				    serv_session,
+    %%				    []),
 
     VMasterSpec = {serv_vnode_master,
 		   {riak_core_vnode_master, start_link, [serv_vnode]},
 		   Restart, Shutdown, worker, [riak_core_vnode_master]},
 
-    {ok, {SupFlags, [ServSessionMapSpec,
+    Entry = {serv_vnode_entry_master,
+	     {riak_core_vnode_master, start_link, [serv_vnode_entry]},
+	     Restart, Shutdown, worker, [riak_core_vnode_master]},
+
+    Stat = {serv_vnode_stat_master,
+	    {riak_core_vnode_master, start_link, [serv_vnode_stat]},
+	    Restart, Shutdown, worker, [riak_core_vnode_master]},
+
+    FsmPut = {serv_fsm_put_sup,
+	      {serv_fsm_put_sup, start_link, []},
+	      Restart, infinity, supervisor, [serv_fsm_put_sup]},
+
+    FsmGet = {serv_fsm_get_sup,
+	      {serv_fsm_get_sup, start_link, []},
+	      Restart, infinity, supervisor, [serv_fsm_get_sup]},
+
+    {ok, {SupFlags, [%ServSessionMapSpec,
 		     %ServChatSpec,
-		     RanchSupSpec,
-		     ListenerSpec,
-		     VMasterSpec
+		     %RanchSupSpec,
+		     %ListenerSpec,
+		     VMasterSpec,
+		     Entry,
+		     Stat,
+		     FsmPut,
+		     FsmGet
 		    ]}}.
