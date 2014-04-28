@@ -20,8 +20,8 @@ start_link() ->
 %% ===================================================================
 init([]) ->
     RestartStrategy = one_for_one,
-    MaxRestarts = 1000,
-    MaxSecondsBetweenRestarts = 3600,
+    MaxRestarts = 5,
+    MaxSecondsBetweenRestarts = 10,
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
@@ -47,9 +47,9 @@ init([]) ->
     %%				    serv_session,
     %%				    []),
 
-    VMasterSpec = {serv_vnode_master,
-		   {riak_core_vnode_master, start_link, [serv_vnode]},
-		   Restart, Shutdown, worker, [riak_core_vnode_master]},
+    %% VMasterSpec = {serv_vnode_master,
+    %% 		   {riak_core_vnode_master, start_link, [serv_vnode]},
+    %% 		   Restart, Shutdown, worker, [riak_core_vnode_master]},
 
     Entry = {serv_vnode_entry_master,
 	     {riak_core_vnode_master, start_link, [serv_vnode_entry]},
@@ -71,7 +71,7 @@ init([]) ->
 		     %ServChatSpec,
 		     %RanchSupSpec,
 		     %ListenerSpec,
-		     VMasterSpec,
+		     %VMasterSpec,
 		     Entry,
 		     Stat,
 		     FsmPut,

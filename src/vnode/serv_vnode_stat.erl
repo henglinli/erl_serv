@@ -83,6 +83,10 @@ sadd(Preflist, ReqID, StatName, Val) ->
 init([Partition]) ->
     {ok, #state { partition=Partition, stats=dict:new() }}.
 
+handle_command(ping, Sender, State) ->
+    lager:info("ping from: ~p", [Sender]),
+    {reply, {pong, State#state.partition, node()}, State};
+
 handle_command({get, ReqID, StatName}, _Sender, #state{stats=Stats}=State) ->
     Reply =
 	case dict:find(StatName, Stats) of
