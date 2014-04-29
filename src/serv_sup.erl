@@ -1,4 +1,5 @@
 -module(serv_sup).
+-include("serv.hrl").
 
 -behaviour(supervisor).
 
@@ -48,14 +49,14 @@ init([]) ->
     %%				    []),
 
     %% VMasterSpec = {serv_vnode_master,
-    %% 		   {riak_core_vnode_master, start_link, [serv_vnode]},
-    %% 		   Restart, Shutdown, worker, [riak_core_vnode_master]},
+    %%		   {riak_core_vnode_master, start_link, [serv_vnode]},
+    %%		   Restart, Shutdown, worker, [riak_core_vnode_master]},
 
-    Entry = {serv_vnode_entry_master,
+    Entry = {?ENTRY_VMASTER,
 	     {riak_core_vnode_master, start_link, [serv_vnode_entry]},
 	     Restart, Shutdown, worker, [riak_core_vnode_master]},
 
-    Stat = {serv_vnode_stat_master,
+    Stat = {?STAT_VMASTER,
 	    {riak_core_vnode_master, start_link, [serv_vnode_stat]},
 	    Restart, Shutdown, worker, [riak_core_vnode_master]},
 

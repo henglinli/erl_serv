@@ -7,7 +7,13 @@
 		  user::[byte() | bitstring()],
 		  token::non_neg_integer()
 		 }).
--define(PRINT(Var), io:format("DEBUG: ~p:~p - ~p~n~n ~p~n~n", [?MODULE, ?LINE, ??Var, Var])).
+%% riak_core nrw
 -define(N, 3).
--define(R, 2).
--define(W, 2).
+-define(R, 1).
+-define(W, 3).
+%% riak_core_vnode_master
+-define(STAT_VMASTER, serv_vnode_stat_master).
+-define(ENTRY_VMASTER, serv_vnode_entry_master).
+%% riakk_core service
+-define(STAT_SERVICE, serv_service_stat).
+-define(ENTRY_SERVICE, serv_service_entry).

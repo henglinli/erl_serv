@@ -52,7 +52,7 @@ prepare(timeout, SD0=#state{client=Client,
 			    stat_name=StatName}) ->
     DocIdx = riak_core_util:chash_key({list_to_binary(Client),
 				       list_to_binary(StatName)}),
-    Prelist = riak_core_apl:get_apl(DocIdx, ?N, serv_vnode_stat),
+    Prelist = riak_core_apl:get_apl(DocIdx, ?R, ?STAT_SERVICE),
     SD = SD0#state{preflist=Prelist},
     {next_state, execute, SD, 0}.
 

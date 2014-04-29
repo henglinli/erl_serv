@@ -1,4 +1,5 @@
 -module(serv_app).
+-include("serv.hrl").
 
 -behaviour(application).
 
@@ -18,10 +19,10 @@ start(_StartType, _StartArgs) ->
 	    %% ok = riak_core_ring_events:add_guarded_handler(serv_ring_event_handler, []),
 	    %% ok = riak_core_node_watcher_events:add_guarded_handler(serv_node_event_handler, []),
 	    ok = riak_core:register(serv, [{vnode_module, serv_vnode_stat}]),
-	    ok = riak_core_node_watcher:service_up(serv_stat, self()),
+	    ok = riak_core_node_watcher:service_up(?STAT_SERVICE, self()),
 
 	    ok = riak_core:register(serv, [{vnode_module, serv_vnode_entry}]),
-	    ok = riak_core_node_watcher:service_up(serv_entry, self()),
+	    ok = riak_core_node_watcher:service_up(?ENTRY_SERVICE, self()),
 	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},
 	    %% webmachine_router:add_route(EntryRoute),
 

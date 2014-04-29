@@ -35,8 +35,7 @@ init([Partition]) ->
 handle_command(ping, Sender, State) ->
     lager:info("ping from: ~p", [Sender]),
     {reply, {pong, State#state.partition, node()}, State};
-handle_command(Message, _Sender, State) ->
-    ?PRINT({unhandled_command, Message}),
+handle_command(_Message, _Sender, State) ->
     {noreply, State}.
 
 handle_handoff_command(Message, Sender, State) ->

@@ -39,7 +39,6 @@
 	  reg            %% registry [regexp => fun]
 	 }).
 
--define(MASTER, serv_vnode_entry_master).
 -define(COMBINED_LF, "(\\d+\\.\\d+\\.\\d+\\.\\d+) (.*) (.*) (\\[.*\\]) \"(.*)\" (\\d+) (.*) \"(.*)\" \"(.*)\"").
 
 %%%===================================================================
@@ -52,7 +51,7 @@ start_vnode(I) ->
 entry(IdxNode, Client, Entry) ->
     riak_core_vnode_master:command(IdxNode,
 				   {entry, Client, Entry},
-				   ?MASTER).
+				   ?ENTRY_VMASTER).
 
 %%%===================================================================
 %%% Callbacks

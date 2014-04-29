@@ -1,4 +1,4 @@
-ESCRIPT = /usr/lib64/erlang/bin/escript
+ESCRIPT = /usr/local/lib64/erlang/bin/escript
 REBAR = $(shell pwd)/rebar
 .PHONY: deps rel
 

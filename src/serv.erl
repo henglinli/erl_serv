@@ -24,15 +24,15 @@
 % @doc Pings a random vnode to make sure communication is functional
 ping() ->
     DocIdx = riak_core_util:chash_key({<<"ping">>, term_to_binary(now())}),
-    PrefList = riak_core_apl:get_apl(DocIdx, 1, serv_stat),
-    [IndexNode | _Rest] = PrefList,
-    riak_core_vnode_master:sync_spawn_command(IndexNode, ping, serv_vnode_stat_master).
+    PrefList = riak_core_apl:get_apl(DocIdx, ?N, ?STAT_SERVICE),
+    %[IndexNode | _Rest] = PrefList,
+    riak_core_vnode_master:command(PrefList, ping, ?STAT_VMASTER).
 
 %% @doc Process an entry.
 entry(Client, Entry) ->
     DocIdx = riak_core_util:chash_key({list_to_binary(Client),
 				       term_to_binary(now())}),
-    PrefList = riak_core_apl:get_apl(DocIdx, 1, serv_vnode_entry),
+    PrefList = riak_core_apl:get_apl(DocIdx, 1, ?ENTRY_SERVICE),
     [IdxNode] = PrefList,
     serv_vnode_entry:entry(IdxNode, Client, Entry).
 
@@ -44,14 +44,14 @@ get(Client, StatName) ->
 get_dbg_preflist(Client, StatName) ->
     DocIdx = riak_core_util:chash_key({list_to_binary(Client),
 				       list_to_binary(StatName)}),
-    riak_core_apl:get_apl(DocIdx, ?N, serv_vnode_stat).
+    riak_core_apl:get_apl(DocIdx, ?N, ?ENTRY_SERVICE).
 
 get_dbg_preflist(Client, StatName, N) ->
     IdxNode = lists:nth(N, get_dbg_preflist(Client, StatName)),
     {ok, req_id, Val} =
-	riak_core_vnode_master:sync_command(IdxNode,
-					    {get, req_id, StatName},
-					    serv_vnode_stat_master),
+	riak_core_vnode_master:command(IdxNode,
+				       {get, req_id, StatName},
+				       ?ENTRY_VMASTER),
     [IdxNode, Val].
 
 %% @doc Set a stat's value, replacing the current value.

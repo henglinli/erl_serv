@@ -31,9 +31,8 @@
 
 -record(state, {partition, stats}).
 
--define(MASTER, serv_vnode_stat_master).
--define(sync(PrefList, Command, Master),
-	riak_core_vnode_master:sync_command(PrefList, Command, Master)).
+-define(sync(PrefList, Command),
+	riak_core_vnode_master:sync_command(PrefList, Command, ?STAT_VMASTER)).
 
 %%%===================================================================
 %%% API
@@ -46,35 +45,35 @@ get(Preflist, ReqID, StatName) ->
     riak_core_vnode_master:command(Preflist,
 				   {get, ReqID, StatName},
 				   {fsm, undefined, self()},
-				   ?MASTER).
+				   ?STAT_VMASTER).
 
 set(Preflist, ReqID, StatName, Val) ->
     riak_core_vnode_master:command(Preflist,
 				   {set, ReqID, StatName, Val},
-				   ?MASTER).
+				   ?STAT_VMASTER).
 
 %% TODO: I have to look at the Sender stuff more closely again
 incr(Preflist, ReqID, StatName) ->
     riak_core_vnode_master:command(Preflist,
 				   {incr, ReqID, StatName},
 				   {fsm, undefined, self()},
-				   ?MASTER).
+				   ?STAT_VMASTER).
 
 incrby(Preflist, ReqID, StatName, Val) ->
     riak_core_vnode_master:command(Preflist,
 				   {incrby, ReqID, StatName, Val},
 				   {fsm, undefined, self()},
-				   ?MASTER).
+				   ?STAT_VMASTER).
 
 append(Preflist, ReqID, StatName, Val) ->
     riak_core_vnode_master:command(Preflist,
 				   {append, ReqID, StatName, Val},
-				   ?MASTER).
+				   ?STAT_VMASTER).
 
 sadd(Preflist, ReqID, StatName, Val) ->
     riak_core_vnode_master:command(Preflist,
 				   {sadd, ReqID, StatName, Val},
-				   ?MASTER).
+				   ?STAT_VMASTER).
 
 %%%===================================================================
 %%% Callbacks
