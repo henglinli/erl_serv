@@ -16,3 +16,4 @@ Mnesia*
 old
 *~
 src/fsm.erl
+dev
