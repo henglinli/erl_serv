@@ -25,7 +25,7 @@
 
 %% API
 start_vnode(I) ->
-    %lager:info("start_vnode(~p)", [I]),
+    %% lager:info("start_vnode(~p)", [I]),
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
 
 init([Partition]) ->
@@ -34,7 +34,8 @@ init([Partition]) ->
 %% Sample command: respond to a ping
 handle_command(ping, Sender, State) ->
     lager:info("ping from: ~p", [Sender]),
-    {reply, {pong, State#state.partition, node()}, State};
+    {noreply, State};
+
 handle_command(_Message, _Sender, State) ->
     {noreply, State}.
 

@@ -1,27 +1,25 @@
-ESCRIPT = /usr/local/lib64/erlang/bin/escript
 REBAR = $(shell pwd)/rebar
-.PHONY: deps rel
+.PHONY: deps
 
 all: deps compile
 
 compile:
-	$(ESCRIPT) $(REBAR) compile
+	$(REBAR) compile
 
 deps:
-	$(ESCRIPT) $(REBAR) get-deps
+	$(REBAR) get-deps
 
 clean:
-	$(ESCRIPT) $(REBAR) clean
+	$(REBAR) clean
 
 distclean: clean devclean relclean
-	$(ESCRIPT) $(REBAR) delete-deps
+	$(REBAR) delete-deps
 
 rel: all
-	$(ESCRIPT) $(REBAR) generate
+	$(REBAR) generate
 
 relclean:
 	rm -rf rel/serv
-	@rm -rf *~
 
 xref: all
 	$(REBAR) skip_deps=true xref
@@ -29,6 +27,7 @@ xref: all
 stage : rel
 	$(foreach dep,$(wildcard deps/*), rm -rf rel/serv/lib/$(shell basename $(dep))-* && ln -sf $(abspath $(dep)) rel/serv/lib;)
 	$(foreach app,$(wildcard apps/*), rm -rf rel/serv/lib/$(shell basename $(app))-* && ln -sf $(abspath $(app)) rel/serv/lib;)
+
 
 ##
 ## Developer targets
@@ -42,7 +41,7 @@ stage : rel
 ##    make stagedevrel DEVNODES=68
 
 .PHONY : stagedevrel devrel
-DEVNODES ?= 3
+DEVNODES ?= 4
 
 # 'seq' is not available on all *BSD, so using an alternate in awk
 SEQ = $(shell awk 'BEGIN { for (i = 1; i < '$(DEVNODES)'; i++) printf("%i ", i); print i ;exit(0);}')
@@ -53,7 +52,7 @@ $(eval devrel : $(foreach n,$(SEQ),dev$(n)))
 dev% : all
 	mkdir -p dev
 	rel/gen_dev $@ rel/vars/dev_vars.config.src rel/vars/$@_vars.config
-	(cd rel && $(ESCRIPT) $(REBAR) generate target_dir=../dev/$@ overlay_vars=vars/$@_vars.config)
+	(cd rel && $(REBAR) generate target_dir=../dev/$@ overlay_vars=vars/$@_vars.config)
 
 stagedev% : dev%
 	  $(foreach dep,$(wildcard deps/*), rm -rf dev/$^/lib/$(shell basename $(dep))* && ln -sf $(abspath $(dep)) dev/$^/lib;)

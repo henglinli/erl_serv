@@ -48,17 +48,17 @@ init([]) ->
     %%				    serv_session,
     %%				    []),
 
-    %% VMasterSpec = {serv_vnode_master,
-    %%		   {riak_core_vnode_master, start_link, [serv_vnode]},
-    %%		   Restart, Shutdown, worker, [riak_core_vnode_master]},
+    ServVMasterSpec = {?SERV_VMASTER,
+    		   {riak_core_vnode_master, start_link, [serv_vnode]},
+    		   Restart, Shutdown, worker, [riak_core_vnode_master]},
 
-    Entry = {?ENTRY_VMASTER,
-	     {riak_core_vnode_master, start_link, [serv_vnode_entry]},
-	     Restart, Shutdown, worker, [riak_core_vnode_master]},
+    %% Entry = {?ENTRY_VMASTER,
+    %% 	     {riak_core_vnode_master, start_link, [serv_vnode_entry]},
+    %% 	     Restart, Shutdown, worker, [riak_core_vnode_master]},
 
-    Stat = {?STAT_VMASTER,
-	    {riak_core_vnode_master, start_link, [serv_vnode_stat]},
-	    Restart, Shutdown, worker, [riak_core_vnode_master]},
+    %% Stat = {?STAT_VMASTER,
+    %% 	    {riak_core_vnode_master, start_link, [serv_vnode_stat]},
+    %% 	    Restart, Shutdown, worker, [riak_core_vnode_master]},
 
     FsmPut = {serv_fsm_put_sup,
 	      {serv_fsm_put_sup, start_link, []},
@@ -72,9 +72,9 @@ init([]) ->
 		     %ServChatSpec,
 		     %RanchSupSpec,
 		     %ListenerSpec,
-		     %VMasterSpec,
-		     Entry,
-		     Stat,
+		     ServVMasterSpec,
+		     %% Entry,
+		     %% Stat,
 		     FsmPut,
 		     FsmGet
 		    ]}}.

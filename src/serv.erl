@@ -22,11 +22,15 @@
 %%%===================================================================
 
 % @doc Pings a random vnode to make sure communication is functional
+-spec ping() -> ok | {error, Reson::term()}.
 ping() ->
     DocIdx = riak_core_util:chash_key({<<"ping">>, term_to_binary(os:timestamp())}),
-    PrefList = riak_core_apl:get_apl(DocIdx, ?N, ?STAT_SERVICE),
-    %[IndexNode | _Rest] = PrefList,
-    riak_core_vnode_master:command(PrefList, ping, ?STAT_VMASTER).
+    case riak_core_apl:get_apl(DocIdx, ?N, ?SERV_VMASTER) of
+	[] ->
+	    {error, "server down"};
+	PrefList ->
+	    riak_core_vnode_master:command(PrefList, ping, ?SERV_VMASTER)
+    end.
 
 %% @doc Process an entry.
 entry(Client, Entry) ->

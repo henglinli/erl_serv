@@ -99,14 +99,6 @@ cluster_admin()
                 exit 1
             fi
             ensure_node_running
-            $NODETOOL rpc serv_console join "$2"
-            ;;
-	staged_join)
-            if [ $# -ne 2 ]; then
-                echo "Usage: $SCRIPT cluster staged_join <node>"
-                exit 1
-            fi
-            ensure_node_running
             $NODETOOL rpc serv_console staged_join "$2"
             ;;
         leave)
