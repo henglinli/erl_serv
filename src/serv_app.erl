@@ -6,6 +6,8 @@
 %% Application callbacks
 -export([start/2, stop/1]).
 
+-record(state, {services}).
+
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
@@ -25,11 +27,35 @@ start(_StartType, _StartArgs) ->
 	    %% ok = riak_core_node_watcher:service_up(?ENTRY_SERVICE, self()),
 	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},
 	    %% webmachine_router:add_route(EntryRoute),
-
-	    {ok, Pid};
+	    Services =[{serv_pb_service_common, 1, 1}],
+	    case start_api(Services) of
+		{ok, _Pid} ->		    
+		    {ok, Pid, #state{services = Services}};
+		{error, Reason} ->
+		    {error, Reason}
+	    end;
 	{error, Reason} ->
 	    {error, Reason}
     end.
 
-stop(_State) ->
+stop(State) ->
+    stop_api(State#state.services).
+
+-spec start_api(Services::riak_api_pb_service:registration()) -> 
+		       supervisor:startlink_ret().
+start_api(Services) ->    
+    riak_core_util:start_app_deps(riak_api),
+    
+    case riak_api_sup:start_link() of
+        {ok, Pid} ->
+            riak_core:register(riak_api, [{stat_mod, riak_api_stat}]),
+            ok = riak_api_pb_service:register(Services),
+            {ok, Pid};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec stop_api(Services::riak_api_pb_service:registration()) -> ok.
+stop_api(Services) ->
+    ok = riak_api_pb_service:deregister(Services),
     ok.

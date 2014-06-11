@@ -13,7 +13,6 @@
 	 to_binary/1,   %% riakc_pb:binary
 	 to_list/1     %% riakc_pb:any_to_list
 	]).
--export([parse_packat/1]).
 
 %% @doc Create an iolist of msg code and protocol buffer
 %% message. Replaces `riakc_pb:encode/1'.
@@ -114,11 +113,3 @@ encode_pair({K,V}) ->
 -spec decode_pair(#pb_pair{}) -> {string(), string()}.
 decode_pair(#pb_pair{key = K, value = V}) ->
     {K, V}.
-
--spec parse_packat(Packet::binary()) ->
-			 undefined | {MsgCode::integer(), MsgData::binary()}.
-parse_packat(<<MsgCode:8/big-unsigned-integer,
-		       MsgData/binary>>) ->
-    {MsgCode, MsgData};
-parse_packat(_) ->
-    undefined.
