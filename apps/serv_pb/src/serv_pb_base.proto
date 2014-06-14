@@ -1,0 +1,7 @@
+// HenryLee<henglinli@gmail.com>
+
+// Error response - may be generated for any Req
+message response {
+    required bytes errmsg = 1;
+    required uint32 errcode = 2;
+}

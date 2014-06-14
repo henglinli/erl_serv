@@ -1,0 +1,27 @@
+// HenryLee<henglinli@gmail.com>
+
+// Error response - may be generated for any Req
+message response {
+    required bytes errmsg = 1;
+    required uint32 errcode = 2;
+}
+
+// pair
+message pb_pair {
+    required bytes key = 1;
+    optional bytes value = 2;
+}
+
+// auth
+message auth {
+  required bytes user = 1;
+  required bytes password = 2;
+}
+
+// chat
+message chat {
+  required bytes from = 1;
+  required bytes to = 2;
+  required uint32 time = 3;
+  required bytes msg = 4;
+}
