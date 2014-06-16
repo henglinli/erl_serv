@@ -15,7 +15,7 @@
 -behaviour(serv_pb_handler).
 
 %% API
--export([handle_request/2]).
+-export([handle/2]).
 
 %%%===================================================================
 %%% API
@@ -26,15 +26,15 @@
 %% @spec
 %% @end
 %%--------------------------------------------------------------------
--spec handle_request(Request::ping,
+-spec handle(Request::ping,
 		     Session::#session{}) ->
 			    {Response::binary(), NewSession::#session{}}.
 
-handle_request(ping, _Session) ->
+handle(ping, _Session) ->
     Response = serv_pb_codec:encode(pong),
     {Response, nochange};
 
-handle_request(_, _) ->
+handle(_, _) ->
     Response = serv_pb_codec:encode(
 		 #response{errmsg = <<"not implement">>,
 				 errcode = 1}),

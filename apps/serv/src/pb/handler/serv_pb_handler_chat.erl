@@ -16,7 +16,7 @@
 -include("serv.hrl").
 %% API
 -export([start_link/0]).
--export([handle_request/2]).
+-export([handle/2]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
@@ -130,9 +130,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handle_request(#chat{}, Session :: #session{}) ->
+-spec handle(#chat{}, Session :: #session{}) ->
 			    {noreply, nochange}.
-handle_request(Chat = #chat{to = To}, _) ->
+handle(Chat = #chat{to = To}, _) ->
     case ets:lookup(serv_session_map:tid(), To) of
 	[] ->
 	    {noreply, nochange};

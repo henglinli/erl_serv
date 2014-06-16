@@ -73,7 +73,7 @@ init([]) ->
     Shutdown = brutal_kill,
     Type = worker,
 
-    Server = {undefined, {serv_pb_server, start_link, []},
+    Server = {serv_pb_server, {serv_pb_server, start_link, []},
 	      Restart, Shutdown, Type, [serv_pb_server]},
 
     {ok, {SupFlags, [Server]}}.

@@ -70,13 +70,15 @@ init([]) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    SessionMap = ?CHILD(serv_pb_session_map, worker),
+    SessionMap = ?CHILD(serv_pb_session, worker),
+
+    Handler = ?CHILD(serv_pb_handler, worker),
 
     ServerSup = ?CHILD(serv_pb_server_sup, supervisor),
 
     Listener = pb_listener_specs(serv_pb_listener:get_listeners()),
 
-    {ok, {SupFlags, [SessionMap, ServerSup, Listener]}}.
+    {ok, {SupFlags, [SessionMap, Handler, ServerSup, Listener]}}.
 
 %%%===================================================================
 %%% Internal functions

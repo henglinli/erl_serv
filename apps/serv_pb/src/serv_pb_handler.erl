@@ -16,7 +16,8 @@
 
 %% API
 -export([start_link/0]).
--export([handler_map_ets/0, register_handler/2, lookup_handler/1,
+
+-export([ets/0, register/2, lookup/1, deregister/1,
 	 handlers/0
 	]).
 %% gen_server callbacks
@@ -25,9 +26,9 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {ets_tab :: ets:tab()}).
 
--callback handle_request(Request :: any(), Session :: #session{}) ->
+-callback handle(Request :: term(), Session :: #session{}) ->
     {Response :: binary() | noreply, NewSession :: #session{} | nochange}.
 
 %%%===================================================================
@@ -59,8 +60,19 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init(Args) -> Result when
+      Args :: term(),
+      Result :: {ok,State} | {ok,State,Timeout} | {ok,State,hibernate} | {stop,Reason} | ignore,
+      State :: term(),
+      Timeout :: pos_integer() | infinity,
+      Reason :: term().
 init([]) ->
-    {ok, #state{}}.
+    case ets:new(?ETS_SERV_HANDLER_NAME, ?ETS_SERV_HANDLER_OPTS) of
+    	?ETS_SERV_HANDLER_NAME ->
+    	    {ok, #state{ets_tab = ?ETS_SERV_HANDLER_NAME}};
+    	_Other ->
+    	    {stop, "ets:new/2 error"}
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -76,6 +88,58 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+%% get
+handle_call(ets, _From, State = #state{ets_tab = EtsTab}) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    {reply, EtsTab, State}
+    end;
+%% all
+handle_call(handlers, _From, State = #state{ets_tab = EtsTab}) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    Result = ets:tab2list(EtsTab),
+	    {reply, Result, State}
+    end;
+%% insert
+handle_call({MsgCode, Handler}, _From, State = #state{ets_tab = EtsTab})
+  when is_integer(MsgCode) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    Result = ets:insert(EtsTab, {MsgCode, Handler}),
+	    {reply, Result, State}
+    end;
+%% lookup
+handle_call({deregister, MsgCode}, _From, State = #state{ets_tab = EtsTab})
+  when is_integer(MsgCode) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    Result = ets:delete(EtsTab, MsgCode),
+	    {reply, Result, State}
+    end;
+%% lookup
+handle_call({lookup, MsgCode}, _From, State = #state{ets_tab = EtsTab})
+  when is_integer(MsgCode) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    case ets:lookup(EtsTab, MsgCode) of
+		[] ->
+		    {reply, undefined, State};
+		[{MsgCode, Handler}] ->
+		    {reply, Handler, State}
+	    end
+    end;
+%%
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -135,29 +199,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handler_map_ets() -> undefined | ets:tab().
-handler_map_ets() ->
-    case ets:info(?ETS_SERV_HANDLER_MAP_NAME) of
-    	undefined ->
-    	    undefined;
-    	List when is_list(List) ->
-    	    ?ETS_SERV_HANDLER_MAP_NAME
-    end.
+-spec ets() -> undefined | ets:tab().
+ets() ->
+    gen_server:call(?SERVER, ets).
 
--spec register_handler(pos_integer(), module()) -> true.
-register_handler(MsgCode, Service) ->
-    ets:insert(?ETS_SERV_HANDLER_MAP_NAME, {MsgCode, Service}).
-
--spec lookup_handler(pos_integer()) -> undefined | module().
-lookup_handler(MsgCode) ->
-    case ets:lookup(?ETS_SESSION_MAP_NAME, MsgCode) of
-	[] ->
-	    undefined;
-	[Tuple] ->
-	    {MsgCode, Service} = Tuple,
-	    Service
-    end.
-
--spec handlers() -> [ module() ].
+-spec handlers() -> [module()].
 handlers() ->
-    ets:tab2list(?ETS_SERV_HANDLER_MAP_NAME).
+    gen_server:call(?SERVER, handlers).
+
+-spec register(pos_integer(), module()) -> undefined | true.
+register(MsgCode, Handler) ->
+    gen_server:call(?SERVER, {MsgCode, Handler}).
+
+-spec deregister(pos_integer()) -> undefined | true.
+deregister(MsgCode) ->
+    gen_server:call(?SERVER, {deregister, MsgCode}).
+
+-spec lookup(pos_integer()) -> undefined | module().
+lookup(MsgCode) ->
+    gen_server:call(?SERVER, {lookup, MsgCode}).

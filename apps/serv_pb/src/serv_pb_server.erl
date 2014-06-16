@@ -57,7 +57,7 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 start_link() ->
-    gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_fsm:start_link(?MODULE, [], []).
 
 %% @doc Sets the socket to service for this server.
 -spec set_socket(pid(), port()) -> ok.
@@ -131,7 +131,7 @@ wait({set_socket, Socket}, _From,
 	    %% check if security is enabled, if it is wait for TLS, otherwise go
 	    %% straight into connected state
 	    {reply, ok, ready, State#state{socket=Socket,
-					       peername=PeerInfo}};
+					   peername=PeerInfo}};
 	{error, Reason} ->
 	    lager:debug("Could not get PB socket peername: ~p", [Reason]),
 	    %% It's not really "ok", but there's no reason for the
@@ -247,19 +247,19 @@ handle_info({tcp, Socket, Packet}, _StateName,
 			 handlers=Handlers,
 			 session = Session
 			}) ->
-    case serv_pb_codec:parse_packat(Packet) of
+    case serv_pb_codec_base:parse_packat(Packet) of
 	undefined ->
 	    lager:debug("recved: [~p]", [Packet]),
-	    Response = serv_pb_codec:encode(
+	    Response = serv_pb_codec_base:encode(
 		      #response{errmsg = <<"bad packet">>,
 				      errcode = 1}),
 	    {next_state, reply, State#state{response = Response}, 0};
 	{MsgCode, MsgData} ->
-	    Request = serv_pb_codec:decode(MsgCode, MsgData),
+	    Request = serv_pb_codec_base:decode(MsgCode, MsgData),
 	    lager:debug("recved: [~p:~p]", [MsgCode, Request]),
 	    case proplists:get_value(MsgCode, Handlers) of
 		undefined ->
-		    Response = serv_pb_codec:encode(
+		    Response = serv_pb_codec_base:encode(
 				 #response{errmsg = <<"not implement">>,
 						 errcode = 2}),
 		    {next_state, reply, State#state{response = Response}, 0};
@@ -280,7 +280,7 @@ handle_info({tcp, Socket, _Data}, _SN, State) ->
     %% progress -> Error
     lager:debug("Received a new PB socket request"
 		" while another was in progress"),
-    Response = serv_pb_codec:encode(
+    Response = serv_pb_codec_base:encode(
 		 #response{errmsg = <<"last request not done">>,
 			   errcode = 1}),
     {next_state, reply_then_stop, State#state{socket = Socket,

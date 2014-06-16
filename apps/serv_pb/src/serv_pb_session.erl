@@ -6,7 +6,8 @@
 %%% @end
 %%% Created :  8 Apr 2014 by Henry Lee <henglinli@gmail.com>
 %%%-------------------------------------------------------------------
--module(serv_pb_session_map).
+-module(serv_pb_session).
+
 -author('HenryLee<henglinli@gmail.com>').
 
 -include("serv_pb.hrl").
@@ -67,11 +68,11 @@ start_link() ->
       Timeout :: pos_integer() | infinity,
       Reason :: term().
 init([]) ->
-   case ets:new(?ETS_SESSION_MAP_NAME, ?ETS_SESSION_MAP_OPTS) of
-       ?ETS_SESSION_MAP_NAME ->
-	   {ok,  #state{ets_tab = ?ETS_SESSION_MAP_NAME}};
+   case ets:new(?ETS_SERV_SESSION_NAME, ?ETS_SERV_SESSION_OPTS) of
+       ?ETS_SERV_SESSION_NAME ->
+	   {ok,  #state{ets_tab = ?ETS_SERV_SESSION_NAME}};
        _Other ->
-	   {stop, "ets:new error"}
+	   {stop, "ets:new/2 error"}
    end.
 
 %%--------------------------------------------------------------------
@@ -88,7 +89,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(session_map_ets, _From, State = #state{ets_tab = EtsTab}) ->
+handle_call(ets, _From, State = #state{ets_tab = EtsTab}) ->
     case ets:info(EtsTab) of
 	undefined ->
 	    {reply, undefined, State};
@@ -156,4 +157,4 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 -spec ets() -> undefined | ets:tab().
 ets() ->
-    gen_server:call(?SERVER, session_map_ets).
+    gen_server:call(?SERVER, ets).
