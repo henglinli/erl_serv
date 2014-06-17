@@ -70,7 +70,7 @@ init(Args) ->
     case gen_tcp:connect(SomeHostInNet, Port,
 			 [{send_timeout, ?TIMEOUT},
 			  {mode, binary},
-			  {packet, 4}
+			  {packet, 2}
 			 ]) of
 	{error, Reason} ->
 	    {stop, Reason};
@@ -99,7 +99,7 @@ handle_call(#request{command = Command,
 	   ) ->
     case Command of
 	ping ->
-	    Ping = serv_pb_codec:encode(ping),
+	    Ping = [1],%serv_pb_codec:encode(ping),
 	    case gen_tcp:send(Socket, Ping) of
 		{error, Reason} ->
 		    {stop, Reason, State};
@@ -182,8 +182,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(Reason, #state{socket = Socket
-		      }) ->
+terminate(Reason, #state{socket = Socket}) ->
     debug("terminate: ~p", [Reason]),
     gen_tcp:close(Socket).
 
@@ -224,8 +223,8 @@ handle_packet(Packet) ->
 	    debug("recved: [~p]", [Packet]),
 	    noreply;
 	{MsgCode, MsgData} ->
-	    Response = serv_pb_codec:decode(MsgCode, MsgData),
-	    debug("recved: [~p:~p]", [MsgCode, Response]),
+	    %Response = serv_pb_codec:decode(MsgCode, MsgData),
+	    debug("recved: [~p:~p]", [MsgCode, MsgData]),
 	    noreply
     end.
 

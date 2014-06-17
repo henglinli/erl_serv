@@ -21,8 +21,8 @@
 -export([init/1, handle_event/3,
 	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
--export([ready/2, ready/3, 
-	 reply/2, reply/3, 
+-export([ready/2, ready/3,
+	 reply/2, reply/3,
 	 reply_then_stop/2, reply_then_stop/3,
 	 wait/2, wait/3]).
 
@@ -33,7 +33,6 @@
 -record(state, {transport = {gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
 		socket :: port() | ssl:sslsocket(),   % socket
 		request,                % current request
-		handlers :: [term()],
 		peername :: undefined | {inet:ip_address(), pos_integer()},
 		common_name :: undefined | string(),
 		security,
@@ -84,7 +83,6 @@ set_socket(Pid, Socket) ->
 -spec init(list()) -> {ok, wait, #state{}}.
 init([]) ->
     serv_pb_stat:update(pbc_connect),
-    %%Handlers = serv_pb_session_map:ets(),
     {ok, wait, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -123,14 +121,14 @@ wait(_Event, State) ->
 %% @end
 %%--------------------------------------------------------------------
 wait({set_socket, Socket}, _From,
-		State = #state{transport= {_Transport, Control}}
-	       ) ->
+		State = #state{transport= {_Transport, Control}}) ->
     case Control:peername(Socket) of
 	{ok, PeerInfo} ->
 	    Control:setopts(Socket, [{active, once}]),
 	    %% check if security is enabled, if it is wait for TLS, otherwise go
 	    %% straight into connected state
-	    {reply, ok, ready, State#state{socket=Socket,
+	    {reply, ok, ready, State#state{request=undefined,
+					   socket=Socket,
 					   peername=PeerInfo}};
 	{error, Reason} ->
 	    lager:debug("Could not get PB socket peername: ~p", [Reason]),
@@ -156,10 +154,11 @@ ready(_Event, _From, State) ->
 
 reply(timeout, State=#state{response=Response,
 			    socket = Socket,
-			    transport = {Transport, _Control}
+			    transport = {Transport, Control}
 			   }) ->
     case Transport:send(Socket, Response) of
 	ok ->
+	    Control:setopts(Socket, [{active, once}]),
 	    {next_state, ready, State, 0};
 	{error, Reason} ->
 	    lager:debug("send error: ~p", [Reason]),
@@ -173,9 +172,9 @@ reply(_Event, _From, State) ->
     {reply, unknown_message, ready, State}.
 
 reply_then_stop(timeout, State=#state{response=Response,
-			    socket = Socket,
-			    transport = {Transport, _Control}
-			   }) ->
+				      socket = Socket,
+				      transport = {Transport, _Control}
+				     }) ->
     Transport:send(Socket, Response),
 
     {stop, normal, State};
@@ -235,7 +234,7 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% @doc The handle_info/3 gen_fsm callback.
-handle_info({tcp_closed, Socket}, _SN, State=#state{socket=Socket}) ->
+handle_info({tcp_closed, Socket}, _SN, State=#state{socket = Socket}) ->
     {stop, normal, State};
 
 handle_info({tcp_error, Socket, _Reason}, _SN, State=#state{socket=Socket}) ->
@@ -244,34 +243,51 @@ handle_info({tcp_error, Socket, _Reason}, _SN, State=#state{socket=Socket}) ->
 handle_info({tcp, Socket, Packet}, _StateName,
 	    State=#state{request=undefined,
 			 socket=Socket,
-			 handlers=Handlers,
-			 session = Session
+			 session=Session
 			}) ->
-    case serv_pb_codec_base:parse_packat(Packet) of
+    case parse_packat(Packet) of
 	undefined ->
 	    lager:debug("recved: [~p]", [Packet]),
-	    Response = serv_pb_codec_base:encode(
-		      #response{errmsg = <<"bad packet">>,
-				      errcode = 1}),
+	    Response = encode(#response{errmsg = <<"bad packet">>,
+					errcode = 1}),
 	    {next_state, reply, State#state{response = Response}, 0};
 	{MsgCode, MsgData} ->
-	    Request = serv_pb_codec_base:decode(MsgCode, MsgData),
-	    lager:debug("recved: [~p:~p]", [MsgCode, Request]),
-	    case proplists:get_value(MsgCode, Handlers) of
+	    lager:debug("recved: {~p, ~p}", [MsgCode, MsgData]),
+	    try
+	    case serv_pb_handler:lookup(MsgCode) of
 		undefined ->
-		    Response = serv_pb_codec_base:encode(
-				 #response{errmsg = <<"not implement">>,
-						 errcode = 2}),
+		    Response = encode(#response{errmsg = <<"not implement">>,
+						errcode = 2}),
 		    {next_state, reply, State#state{response = Response}, 0};
-		Handler ->
-		    case Handler:handle_request(Request, Session) of
+		Handler when is_atom(Handler) ->
+		    case Handler:handle(MsgData, Session) of
 			{noreply, nochange} ->
+			    {next_state, ready, State, 0};
+			{noreply, NewSession} ->
 			    {next_state, ready,
-			     State#state{request=undefined}, 0};
+			     State#state{session = NewSession}, 0};
+			{Response, nochange} ->
+			    {next_state, reply,
+			     State#state{response = Response}, 0};
+			{Response, NewSession} ->
+			    {next_state, reply,
+			     State#state{response = Response,
+					 session = NewSession}, 0};
 			_ ->
-			    {next_state, ready,
-			     State#state{request=undefined}, 0}
+			    Res = encode(#response{errmsg = <<"internal error">>,
+						   errcode = 3}),
+			    {next_state, reply_then_stop,
+			     State#state{response=Res}, 0}
 		    end
+	    end
+	    catch
+		%% Tell the client we errored before closing the connection.
+		_Type:_Failure ->
+		    lager:error("error handle msg: {~p, ~p}", [MsgCode, MsgData]),
+		    Re = encode(#response{errmsg = <<"internal error">>,
+					   errcode = 3}),
+		    {next_state, reply_then_stop,
+		     State#state{response = Re}, 0}
 	    end
     end;
 
@@ -280,9 +296,8 @@ handle_info({tcp, Socket, _Data}, _SN, State) ->
     %% progress -> Error
     lager:debug("Received a new PB socket request"
 		" while another was in progress"),
-    Response = serv_pb_codec_base:encode(
-		 #response{errmsg = <<"last request not done">>,
-			   errcode = 1}),
+    Response = encode(#response{errmsg = <<"last request not done">>,
+				errcode = 4}),
     {next_state, reply_then_stop, State#state{socket = Socket,
 					      response = Response}, 0};
 
@@ -320,3 +335,14 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec parse_packat(Packet::binary()) ->
+			  undefined | {MsgCode::integer(), MsgData::binary()}.
+parse_packat(<<MsgCode:8/big-unsigned-integer,
+	       MsgData/binary>>) ->
+    {MsgCode, MsgData};
+parse_packat(_) ->
+    undefined.
+
+-spec encode(Error :: #response{}) -> Response::iolist().
+encode(Error) ->
+    [0 | serv_pb_base_pb:encode(Error)].
