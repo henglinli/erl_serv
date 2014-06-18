@@ -9,7 +9,7 @@
 -module(serv_pb_server).
 -author('HenryLee<henglinli@gmail.com>').
 
--include("serv_pb.hrl").
+%-include("serv_pb.hrl").
 -include("serv_pb_base_pb.hrl").
 
 -behaviour(gen_fsm).
@@ -26,7 +26,7 @@
 	 reply_then_stop/2, reply_then_stop/3,
 	 wait/2, wait/3]).
 
--export([set_socket/2]).
+-export([set_socket/2, send/2, sync_send/2]).
 
 -define(SERVER, ?MODULE).
 
@@ -38,7 +38,7 @@
 		security,
 		retries = 3,
 		response = <<>> :: binary(),
-		session = #session{}
+		session = undefined
 	       }).
 
 %%%===================================================================
@@ -63,6 +63,16 @@ start_link() ->
 set_socket(Pid, Socket) ->
     gen_fsm:sync_send_event(Pid, {set_socket, Socket}, infinity).
 
+%% @doc sync send to client
+-spec sync_send(Pid :: pid(), Message :: binary() | iolist()) ->
+		       ok | {error, Reason :: term()}.
+sync_send(Pid, Message) ->
+    gen_fsm:sync_send_event(Pid, {message, Message}, infinity).
+%% @doc send to client
+-spec send(Pid :: pid(), Message :: binary() | iolist()) -> ok.
+send(Pid, Message) ->
+    gen_fsm:send_event(Pid, {message, Message}).
+
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
@@ -84,7 +94,6 @@ set_socket(Pid, Socket) ->
 init([]) ->
     serv_pb_stat:update(pbc_connect),
     {ok, wait, #state{}}.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -147,11 +156,12 @@ ready(timeout, State) ->
     {next_state, ready, State};
 
 ready(_Event, State) ->
-    {next_state, ready, State}.
+    {next_state, ready, State#state{response = undefined}}.
 
 ready(_Event, _From, State) ->
-    {reply, unknown_message, ready, State}.
+    {reply, unknown_message, ready, State#state{response = undefined}}.
 
+%% next_state
 reply(timeout, State=#state{response=Response,
 			    socket = Socket,
 			    transport = {Transport, Control}
@@ -165,8 +175,32 @@ reply(timeout, State=#state{response=Response,
 	    {stop, Reason, State}
     end;
 
+reply({message, Message}, State=#state{socket = Socket,
+				       transport = {Transport, Control}
+				      }) ->
+    case Transport:send(Socket, Message) of
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, ready, State, 0};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, State}
+    end;
+
 reply(_Event, State) ->
     {next_state, ready, State}.
+
+reply({message, Message}, _From, State=#state{socket = Socket,
+					      transport = {Transport, Control}
+					     }) ->
+    case Transport:send(Socket, Message) of
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {reply, ok, ready, State, 0};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, Reason, State}
+    end;
 
 reply(_Event, _From, State) ->
     {reply, unknown_message, ready, State}.
@@ -248,17 +282,20 @@ handle_info({tcp, Socket, Packet}, _StateName,
     case parse_packat(Packet) of
 	undefined ->
 	    lager:debug("recved: [~p]", [Packet]),
-	    Response = encode(#response{errmsg = <<"bad packet">>,
-					errcode = 1}),
-	    {next_state, reply, State#state{response = Response}, 0};
+	    BadPkg = encode(#response{errmsg = <<"bad packet">>,
+				      errcode = 1}),
+	    {next_state, reply, State#state{response = BadPkg}, 0};
 	{MsgCode, MsgData} ->
 	    lager:debug("recved: {~p, ~p}", [MsgCode, MsgData]),
+	    NotImpl = encode(#response{errmsg = <<"not implement">>,
+				       errcode = 2}),
+	    InternalErr = encode(#response{errmsg = <<"internal error">>,
+					   errcode = 3}),
 	    try
 	    case serv_pb_handler:lookup(MsgCode) of
 		undefined ->
-		    Response = encode(#response{errmsg = <<"not implement">>,
-						errcode = 2}),
-		    {next_state, reply, State#state{response = Response}, 0};
+		    lager:warn("unregistered message: ~p", [MsgCode]),
+		    {next_state, reply, State#state{response = NotImpl}, 0};
 		Handler when is_atom(Handler) ->
 		    case Handler:handle(MsgData, Session) of
 			{noreply, nochange} ->
@@ -274,20 +311,16 @@ handle_info({tcp, Socket, Packet}, _StateName,
 			     State#state{response = Response,
 					 session = NewSession}, 0};
 			_ ->
-			    Res = encode(#response{errmsg = <<"internal error">>,
-						   errcode = 3}),
 			    {next_state, reply_then_stop,
-			     State#state{response=Res}, 0}
+			     State#state{response = InternalErr}, 0}
 		    end
 	    end
 	    catch
 		%% Tell the client we errored before closing the connection.
 		_Type:_Failure ->
 		    lager:error("error handle msg: {~p, ~p}", [MsgCode, MsgData]),
-		    Re = encode(#response{errmsg = <<"internal error">>,
-					   errcode = 3}),
 		    {next_state, reply_then_stop,
-		     State#state{response = Re}, 0}
+		     State#state{response = InternalErr}, 0}
 	    end
     end;
 

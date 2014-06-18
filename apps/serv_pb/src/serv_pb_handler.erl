@@ -12,7 +12,7 @@
 
 -include("serv_pb.hrl").
 
--behaviour(gen_server).
+-behaviour(riak_core_gen_server).
 
 %% API
 -export([start_link/0]).
@@ -28,8 +28,9 @@
 
 -record(state, {ets_tab :: ets:tab()}).
 
--callback handle(Request :: term(), Session :: #session{}) ->
-    {Response :: binary() | noreply, NewSession :: #session{} | nochange}.
+%% handle message
+-callback handle(Request :: term(), Session :: term()) ->
+    {Response :: binary() | noreply, NewSession :: term() | nochange}.
 
 %%%===================================================================
 %%% API
@@ -68,10 +69,10 @@ start_link() ->
       Reason :: term().
 init([]) ->
     case ets:new(?ETS_SERV_HANDLER_NAME, ?ETS_SERV_HANDLER_OPTS) of
-    	?ETS_SERV_HANDLER_NAME ->
-    	    {ok, #state{ets_tab = ?ETS_SERV_HANDLER_NAME}};
-    	_Other ->
-    	    {stop, "ets:new/2 error"}
+	?ETS_SERV_HANDLER_NAME ->
+	    {ok, #state{ets_tab = ?ETS_SERV_HANDLER_NAME}};
+	_Other ->
+	    {stop, "ets:new/2 error"}
     end.
 
 %%--------------------------------------------------------------------
@@ -201,20 +202,20 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec ets() -> undefined | ets:tab().
 ets() ->
-    gen_server:call(?SERVER, ets).
+    riak_core_gen_server:call(?SERVER, ets).
 
 -spec handlers() -> [module()].
 handlers() ->
-    gen_server:call(?SERVER, handlers).
+    riak_core_gen_server:call(?SERVER, handlers).
 
 -spec register(pos_integer(), module()) -> undefined | true.
 register(MsgCode, Handler) ->
-    gen_server:call(?SERVER, {MsgCode, Handler}).
+    riak_core_gen_server:call(?SERVER, {MsgCode, Handler}).
 
 -spec deregister(pos_integer()) -> undefined | true.
 deregister(MsgCode) ->
-    gen_server:call(?SERVER, {deregister, MsgCode}).
+    riak_core_gen_server:call(?SERVER, {deregister, MsgCode}).
 
 -spec lookup(pos_integer()) -> undefined | module().
 lookup(MsgCode) ->
-    gen_server:call(?SERVER, {lookup, MsgCode}).
+    riak_core_gen_server:call(?SERVER, {lookup, MsgCode}).

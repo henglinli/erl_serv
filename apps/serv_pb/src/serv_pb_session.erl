@@ -12,12 +12,13 @@
 
 -include("serv_pb.hrl").
 
--behaviour(gen_server).
+-behaviour(riak_core_gen_server).
 
 %% API
 -export([start_link/0]).
 
--export([ets/0
+-export([ets/0, sessions/0, 
+	 insert/2, delete/1, lookup/1
 	]).
 
 %% gen_server callbacks
@@ -89,6 +90,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+%% get
 handle_call(ets, _From, State = #state{ets_tab = EtsTab}) ->
     case ets:info(EtsTab) of
 	undefined ->
@@ -96,11 +98,50 @@ handle_call(ets, _From, State = #state{ets_tab = EtsTab}) ->
 	InfoList when is_list(InfoList) ->
 	    {reply, EtsTab, State}
     end;
-
+%% all
+handle_call(sessions, _From, State = #state{ets_tab = EtsTab}) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    Result = ets:tab2list(EtsTab),
+	    {reply, Result, State}
+    end;
+%% insert
+handle_call({Key, Value}, _From, State = #state{ets_tab = EtsTab}) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    Result = ets:insert(EtsTab, {Key, Value}),
+	    {reply, Result, State}
+    end;
+%% delete
+handle_call({delete, Key}, _From, State = #state{ets_tab = EtsTab}) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    Result = ets:delete(EtsTab, Key),
+	    {reply, Result, State}
+    end;
+%% lookup
+handle_call({lookup, Key}, _From, State = #state{ets_tab = EtsTab}) ->
+    case ets:info(EtsTab) of
+	undefined ->
+	    {reply, undefined, State};
+	InfoList when is_list(InfoList) ->
+	    case ets:lookup(EtsTab, Key) of
+		[] ->
+		    {reply, undefined, State};
+		[Session] ->
+		    {reply, Session, State}
+	    end
+    end;
+%%
 handle_call(_Request, _From, State) ->
-    Reply = unknown_request,
+    Reply = ok,
     {reply, Reply, State}.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -157,4 +198,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 -spec ets() -> undefined | ets:tab().
 ets() ->
-    gen_server:call(?SERVER, ets).
+    riak_core_gen_server:call(?SERVER, ets).
+
+-spec sessions() -> [tuple()].
+sessions() ->
+    riak_core_gen_server:call(?SERVER, sessions).
+
+-spec insert(term(), term()) -> undefined | true.
+insert(Key, Value) ->    
+    riak_core_gen_server:call(?SERVER, {Key, Value}).
+
+-spec delete(term()) -> undefined | true.
+delete(Key) ->
+    riak_core_gen_server:call(?SERVER, {delete, Key}).
+
+-spec lookup(term()) -> undefined | true.
+lookup(Key) ->
+    riak_core_gen_server:call(?SERVER, {lookup, Key}).
