@@ -10,7 +10,7 @@
 %% ===================================================================
 % @doc The application:start callback.
 -spec start(Type, StartArgs)
-           -> {ok, Pid} | {ok, Pid, State} | {error, Reason} when
+	   -> {ok, Pid} | {ok, Pid, State} | {error, Reason} when
       Type :: normal
 	    | {takeover, Node :: node()}
 	    | {failover, Node :: node()},
@@ -24,10 +24,15 @@ start(_StartType, _StartArgs) ->
 	ignore ->
 	    {error, ignore};
 	{ok, Pid} ->
-	    {ok, Pid};
+	    case riak_core:register(serv_pb, [{stat_mod, serv_pb_stat}]) of
+		ok ->
+		    {ok, Pid};
+		_Other ->
+		    {error, "riack_core:register serv_pb error"}
+	    end;
 	{error, Reason} ->
 	    {error, Reason};
-	_Undefined -> 
+	_Undefined ->
 	    {error, unknown}
     end.
 
@@ -40,8 +45,7 @@ stop(_State) ->
 register_stat() ->
      case riak_core:register(serv_pb, [{stat_mod, serv_pb_stat}]) of
 	 ok ->
-		   ok;
+	     ok;
 	 _Other ->
 	     {error, "riack_core:register serv_pb error"}
      end.
-    

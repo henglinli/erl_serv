@@ -34,22 +34,3 @@ start(_StartType, _StartArgs) ->
 
 stop(_State) ->
    ok.
-
-%% -spec start_api(Services::riak_api_pb_service:registration()) -> 
-%% 		       supervisor:startlink_ret().
-%% start_api(Services) ->    
-%%     riak_core_util:start_app_deps(riak_api),
-    
-%%     case riak_api_sup:start_link() of
-%%         {ok, Pid} ->
-%%             riak_core:register(riak_api, [{stat_mod, riak_api_stat}]),
-%%             ok = riak_api_pb_service:register(Services),
-%%             {ok, Pid};
-%%         {error, Reason} ->
-%%             {error, Reason}
-%%     end.
-
-%% -spec stop_api(Services::riak_api_pb_service:registration()) -> ok.
-%% stop_api(Services) ->
-%%     ok = riak_api_pb_service:deregister(Services),
-%%     ok.

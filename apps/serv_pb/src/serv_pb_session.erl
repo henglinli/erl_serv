@@ -71,7 +71,7 @@ start_link() ->
 init([]) ->
    case ets:new(?ETS_SERV_SESSION_NAME, ?ETS_SERV_SESSION_OPTS) of
        ?ETS_SERV_SESSION_NAME ->
-	   {ok,  #state{ets_tab = ?ETS_SERV_SESSION_NAME}};
+	   {ok,  #state{ets_tab = ?ETS_SERV_SESSION_NAME}, hibernate};
        _Other ->
 	   {stop, "ets:new/2 error"}
    end.
