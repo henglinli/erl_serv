@@ -12,7 +12,7 @@
 		  token::non_neg_integer()
 		 }).
 %% ets session
--define(ETS_SERV_SESSION_NAME, serv_pb_session_map).
+-define(ETS_SERV_SESSION_NAME, serv_pb_session).
 -define(ETS_SERV_SESSION_HEIR, {heir, self(), undefined}).
 -define(ETS_SERV_SESSION_OPTS, [public,
 				named_table,
@@ -22,9 +22,9 @@
 				{read_concurrency, true}
 			       ]).
 %% ets handler
--define(ETS_SERV_HANDLER_NAME, serv_pb_handlers_map).
+-define(ETS_SERV_HANDLER_NAME, serv_pb_handler).
 -define(ETS_SERV_HANDLER_HEIR, {heir, self(), undefined}).
--define(ETS_SERV_HANDLER_OPTS, [protected,
+-define(ETS_SERV_HANDLER_OPTS, [public,
 				named_table,
 				set,
 				?ETS_SERV_HANDLER_HEIR,

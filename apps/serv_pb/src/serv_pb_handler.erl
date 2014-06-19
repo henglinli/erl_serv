@@ -12,7 +12,7 @@
 
 -include("serv_pb.hrl").
 
--behaviour(riak_core_gen_server).
+-behaviour(gen_server).
 
 %% API
 -export([start_link/0]).
@@ -23,6 +23,10 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -define(SERVER, ?MODULE).
 
@@ -200,22 +204,67 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec ets() -> undefined | ets:tab().
+-spec ets() -> atom().
 ets() ->
-    riak_core_gen_server:call(?SERVER, ets).
+    ?ETS_SERV_HANDLER_NAME.
 
--spec handlers() -> [module()].
+-spec handlers() -> [tuple()].
 handlers() ->
-    riak_core_gen_server:call(?SERVER, handlers).
+    ets:tab2list(?ETS_SERV_HANDLER_NAME).
 
 -spec register(pos_integer(), module()) -> undefined | true.
-register(MsgCode, Handler) ->
-    riak_core_gen_server:call(?SERVER, {MsgCode, Handler}).
+register(MsgCode, Handler)
+  when is_integer(MsgCode), is_atom(Handler) ->
+	  ets:insert(?ETS_SERV_HANDLER_NAME, {MsgCode, Handler}).
 
 -spec deregister(pos_integer()) -> undefined | true.
-deregister(MsgCode) ->
-    riak_core_gen_server:call(?SERVER, {deregister, MsgCode}).
+deregister(MsgCode)
+  when is_integer(MsgCode) ->
+    ets:delete(?ETS_SERV_HANDLER_NAME, MsgCode).
 
 -spec lookup(pos_integer()) -> undefined | module().
-lookup(MsgCode) ->
-    riak_core_gen_server:call(?SERVER, {lookup, MsgCode}).
+lookup(MsgCode)
+  when is_integer(MsgCode) ->
+    ets:lookup(?ETS_SERV_HANDLER_NAME, MsgCode).
+
+%% ===================================================================
+%% EUnit tests
+%% ===================================================================
+-ifdef(TEST).
+
+serv_pb_handler_test_() ->
+    { setup,
+      fun setup/0,
+      fun cleanup/1,
+      [
+       fun ets_test_case/0,
+       fun handlers_test_case/0,
+       fun register_test_case/0,
+       fun deregister_test_case/0,
+       fun lookup_test_case/0
+      ]
+    }.
+
+steup() ->
+    start_link().
+
+ets_test_case() ->
+    ?assertEqual(?ETS_SERV_HANDLER_NAME, ets()).
+
+handlers_test_case() ->
+    ?assert(is_list(handlers()).
+
+register_test_case() ->
+    ?assertEqual(true, register(1, fake_ping)),
+    ?assertEqual(true, register(2, fake_info)),
+
+deregister_test_case() ->
+    ?assertEqual(true, deregister(2)).
+
+lookup_test_case() ->
+    ?assertEqual({1, fake_ping}, lookup(1)).
+
+cleanup(_Ctx) ->
+    ok.
+
+-endif.

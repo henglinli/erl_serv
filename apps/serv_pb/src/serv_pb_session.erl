@@ -12,12 +12,12 @@
 
 -include("serv_pb.hrl").
 
--behaviour(riak_core_gen_server).
+-behaviour(gen_server).
 
 %% API
 -export([start_link/0]).
 
--export([ets/0, sessions/0, 
+-export([ets/0, sessions/0,
 	 insert/2, delete/1, lookup/1
 	]).
 
@@ -63,7 +63,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 %% session map
 -spec init(Args) -> Result when
-      Args :: term(),      
+      Args :: term(),
       Result :: {ok,State} | {ok,State,Timeout} | {ok,State,hibernate} | {stop,Reason} | ignore,
       State :: term(),
       Timeout :: pos_integer() | infinity,
@@ -196,22 +196,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec ets() -> undefined | ets:tab().
+-spec ets() -> atom().
 ets() ->
-    riak_core_gen_server:call(?SERVER, ets).
+    ?ETS_SERV_SESSION_NAME.
 
 -spec sessions() -> [tuple()].
 sessions() ->
-    riak_core_gen_server:call(?SERVER, sessions).
+    ets:tab2list(?ETS_SERV_SESSION_NAME).
 
--spec insert(term(), term()) -> undefined | true.
-insert(Key, Value) ->    
-    riak_core_gen_server:call(?SERVER, {Key, Value}).
+-spec insert(binary(), term()) -> undefined | true.
+insert(Key, Value)
+  when is_binary(Key) ->
+    ets:insert(?ETS_SERV_SESSION_NAME, {Key, Value}).
 
--spec delete(term()) -> undefined | true.
-delete(Key) ->
-    riak_core_gen_server:call(?SERVER, {delete, Key}).
+-spec delete(binary()) -> undefined | true.
+delete(Key)
+  when is_binary(Key) ->
+    ets:delete(?ETS_SERV_SESSION_NAME, Key).
 
--spec lookup(term()) -> undefined | true.
-lookup(Key) ->
-    riak_core_gen_server:call(?SERVER, {lookup, Key}).
+-spec lookup(binary()) -> [tuple()].
+lookup(Key)
+  when is_binary(Key) ->
+    ets:lookup(?ETS_SERV_SESSION_NAME, Key).
