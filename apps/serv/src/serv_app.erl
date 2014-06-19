@@ -25,6 +25,8 @@ start(_StartType, _StartArgs) ->
 	    %% ok = riak_core_node_watcher:service_up(?ENTRY_SERVICE, self()),
 	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},
 	    %% webmachine_router:add_route(EntryRoute),
+	    true = serv_pb_handler:register(1, serv_pb_handler_ping),
+	    true = serv_pb_handler:register(3, serv_pb_handler_auth),
 	    {ok, Pid};
 	{error, Reason} ->
 	    {error, Reason};
@@ -33,4 +35,6 @@ start(_StartType, _StartArgs) ->
     end.
 
 stop(_State) ->
-   ok.
+    true = serv_pb_handler:deregister(1),
+    true = serv_pb_handler:deregister(3),
+    ok.

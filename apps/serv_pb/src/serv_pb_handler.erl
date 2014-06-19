@@ -34,7 +34,11 @@
 
 %% handle message
 -callback handle(Request :: term(), Session :: term()) ->
-    {Response :: binary() | noreply, NewSession :: term() | nochange}.
+    {error, Reason :: term()} |
+    {noreply, nochange} |
+    {noreply, Session :: term()} |
+    {Response :: binary(), nochange} |
+    {Response :: binary(), NewSession :: term()}.
 
 %%%===================================================================
 %%% API
@@ -225,7 +229,8 @@ deregister(MsgCode)
 -spec lookup(pos_integer()) -> undefined | module().
 lookup(MsgCode)
   when is_integer(MsgCode) ->
-    ets:lookup(?ETS_SERV_HANDLER_NAME, MsgCode).
+    [{MsgCode, Handler} | _Rest] = ets:lookup(?ETS_SERV_HANDLER_NAME, MsgCode),
+    Handler.
 
 %% ===================================================================
 %% EUnit tests

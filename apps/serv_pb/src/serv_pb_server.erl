@@ -293,7 +293,7 @@ handle_info({tcp, Socket, Packet}, _StateName,
 					   errcode = 3}),
 	    %%try
 	    case serv_pb_handler:lookup(MsgCode) of
-		[] ->
+		undefined ->
 		    lager:warning("unregistered message: ~p", [MsgCode]),
 		    {next_state, reply, State#state{response = NotImpl}, 0};
 		Handler when is_atom(Handler) ->

@@ -12,10 +12,12 @@
 
 %-include("serv_pb.hrl").
 %-include("serv.hrl").
+-include_lib("serv/include/serv_pb_chat_pb.hrl").
 %% API
 -export([start_link/1]).
 -export([start/1]).
--export([ping/0]).
+-export([ping/0, login/1
+	]).
 -export([stop/0]).
 
 %% gen_server callbacks
@@ -93,14 +95,22 @@ init(Args) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call(#request{command = Command,
-		     data = _Data},
+		     data = Data},
 	    _From,
 	    #state{socket = Socket} = State
 	   ) ->
     case Command of
 	ping ->
-	    Ping = [1],%serv_pb_codec:encode(ping),
+	    Ping = [1, <<"ping">>],%serv_pb_codec:encode(ping),
 	    case gen_tcp:send(Socket, Ping) of
+		{error, Reason} ->
+		    {stop, Reason, State};
+		ok ->
+		    {reply, ok, State}
+	    end;
+	auth ->
+	    Auth = serv_pb_chat_pb:encode(Data),
+	    case gen_tcp:send(Socket, [3, Auth]) of
 		{error, Reason} ->
 		    {stop, Reason, State};
 		ok ->
@@ -240,3 +250,9 @@ parse_packat(_) ->
 ping() ->
     gen_server:call(?SERVER,
 		    #request{command = ping}).
+-spec login(Name :: binary()) -> undefined | ok.
+login(Name) ->
+    Auth = #auth{user = Name, password = Name},
+    gen_server:call(?SERVER,
+		    #request{command = auth,
+			     data = Auth}).

@@ -12,8 +12,8 @@
 -behaviour(gen_server).
 -behaviour(serv_pb_handler).
 
--include("serv_pb.hrl").
 -include("serv.hrl").
+-include("serv_pb_chat_pb.hrl").
 %% API
 -export([start_link/0]).
 -export([handle/2]).
@@ -130,13 +130,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec handle(#chat{}, Session :: #session{}) ->
-			    {noreply, nochange}.
-handle(Chat = #chat{to = To}, _) ->
-    case ets:lookup(serv_session_map:tid(), To) of
-	[] ->
-	    {noreply, nochange};
-	[{_, Pid}] ->
-	    gen_server:cast(Pid, {send, Chat}),
-	    {noreply, nochange}
-    end.
+-spec handle(Chat :: binary(), Session :: term()) ->
+		    {noreply, nochange}.
+handle(_, _) ->
+    {noreply, nochange}.
