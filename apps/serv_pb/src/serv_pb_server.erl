@@ -291,10 +291,10 @@ handle_info({tcp, Socket, Packet}, _StateName,
 				       errcode = 2}),
 	    InternalErr = encode(#response{errmsg = <<"internal error">>,
 					   errcode = 3}),
-	    try
+	    %%try
 	    case serv_pb_handler:lookup(MsgCode) of
-		undefined ->
-		    lager:warn("unregistered message: ~p", [MsgCode]),
+		[] ->
+		    lager:warning("unregistered message: ~p", [MsgCode]),
 		    {next_state, reply, State#state{response = NotImpl}, 0};
 		Handler when is_atom(Handler) ->
 		    case Handler:handle(MsgData, Session) of
@@ -315,13 +315,13 @@ handle_info({tcp, Socket, Packet}, _StateName,
 			     State#state{response = InternalErr}, 0}
 		    end
 	    end
-	    catch
-		%% Tell the client we errored before closing the connection.
-		_Type:_Failure ->
-		    lager:error("error handle msg: {~p, ~p}", [MsgCode, MsgData]),
-		    {next_state, reply_then_stop,
-		     State#state{response = InternalErr}, 0}
-	    end
+	    %% catch
+	    %% 	%% Tell the client we errored before closing the connection.
+	    %% 	_Type:_Failure ->
+	    %% 	    lager:error("handle msg: {~p, ~p}", [MsgCode, MsgData]),
+	    %% 	    {next_state, reply_then_stop,
+	    %% 	     State#state{response = InternalErr}, 0}
+	    %% end
     end;
 
 handle_info({tcp, Socket, _Data}, _SN, State) ->

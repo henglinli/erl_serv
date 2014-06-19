@@ -7,7 +7,9 @@
   {applications, [
 		  kernel,
 		  stdlib,
-		  riak_core
+		  lager,
+		  riak_core,
+		  serv_pb
 		 ]},
   {mod, { serv_app, []}},
   {env, []}

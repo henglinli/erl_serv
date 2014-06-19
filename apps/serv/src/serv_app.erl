@@ -11,7 +11,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    %riak_core_util:start_app_deps(serv),
+    riak_core_util:start_app_deps(serv),
     case serv_sup:start_link() of
 	{ok, Pid} ->
 	    ok = riak_core:register(serv, [{vnode_module, serv_vnode}]),
