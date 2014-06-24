@@ -9,6 +9,7 @@
 		  stdlib,
 		  lager,
 		  riak_core,
+		  gproc,
 		  serv_pb
 		 ]},
   {mod, { serv_app, []}},

@@ -20,7 +20,7 @@
 handle(Auth, _Session) ->
     case serv_pb_chat_pb:decode(auth, Auth) of
 	#auth{user = User, password = Password} ->
-	    lager:info("~p: ~p", [User, Password]),
+	    lager:info("~p:~p", [User, Password]),
 	    {[3, <<"auth">>], nochange};
 	_Other -> 
 	    {[2, <<"pong">>], nochange}
