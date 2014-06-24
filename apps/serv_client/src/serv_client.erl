@@ -67,9 +67,9 @@ start_link(Port) ->
 %% @end
 %%--------------------------------------------------------------------
 init(Args) ->
-    SomeHostInNet = "localhost", % to make it runnable on one machine
+    Host = "localhost", % to make it runnable on one machine
     Port = proplists:get_value(port, Args, 10017),
-    case gen_tcp:connect(SomeHostInNet, Port,
+    case gen_tcp:connect(Host, Port,
 			 [{send_timeout, ?TIMEOUT},
 			  {mode, binary},
 			  {packet, 2}
@@ -153,7 +153,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(timeout, State) ->
-    debug("recv timeout"),
+    %lager:info("recv timeout"),
     {noreply, State, hibernate};
 
 handle_info(Info, #state{} = State) ->
@@ -171,10 +171,10 @@ handle_info(Info, #state{} = State) ->
 		    end
 	    end;
 	{tcp_closed, _Socket} ->
-	    debug("connection closed", []),
+	    lager:info("connection closed", []),
 	    {stop, normal, State};
 	{tcp_error, _Socket, Reason} ->
-	    debug("connection error: ~p", [Reason]),
+	    lager:info("connection error: ~p", [Reason]),
 	    {stop, Reason, State}
     end;
 
@@ -193,7 +193,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(Reason, #state{socket = Socket}) ->
-    debug("terminate: ~p", [Reason]),
+    lager:info("terminate: ~p", [Reason]),
     gen_tcp:close(Socket).
 
 %%--------------------------------------------------------------------
@@ -212,12 +212,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 %% utils
-debug(Data) ->
-    lager:info(Data).
-
-debug(Format, Data) ->
-    lager:info(Format, Data).
-
 start(Port) ->
     lager:start(),
     start_link(Port).
@@ -230,11 +224,17 @@ stop() ->
 handle_packet(Packet) ->
     case parse_packat(Packet) of
 	undefined ->
-	    debug("recved: [~p]", [Packet]),
+	    lager:info("recved: [~p]", [Packet]),
 	    noreply;
+	{0, MsgData} ->
+	    #response{errcode = ErrCode, errmsg = ErrMsg} 
+		= serv_pb_base_pb:decode(response, MsgData),
+	    lager:info("recved: [~p:~p]", [ErrCode, ErrMsg]),
+	    noreply;
+	    
 	{MsgCode, MsgData} ->
 	    %Response = serv_pb_codec:decode(MsgCode, MsgData),
-	    debug("recved: [~p:~p]", [MsgCode, MsgData]),
+	    lager:info("recved: [~p:~p]", [MsgCode, MsgData]),
 	    noreply
     end.
 
