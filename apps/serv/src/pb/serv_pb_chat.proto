@@ -1,15 +1,8 @@
 // HenryLee<henglinli@gmail.com>
 
-// Error response - may be generated for any Req
-message response {
-    required bytes errmsg = 1;
-    required uint32 errcode = 2;
-}
-
-// pair
-message pb_pair {
-    required bytes key = 1;
-    optional bytes value = 2;
+// session
+message session {
+    required bytes user = 1;
 }
 
 // auth

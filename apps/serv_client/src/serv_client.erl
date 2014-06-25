@@ -10,13 +10,12 @@
 
 -behaviour(gen_server).
 
-%-include("serv_pb.hrl").
-%-include("serv.hrl").
+-include_lib("serv_pb/include/serv_pb_base_pb.hrl").
 -include_lib("serv/include/serv_pb_chat_pb.hrl").
 %% API
 -export([start_link/1]).
 -export([start/1]).
--export([ping/0, login/1
+-export([ping/0, login/1, chat/1
 	]).
 -export([stop/0]).
 
@@ -28,7 +27,8 @@
 
 -define(TIMEOUT, 3600).
 
--record(state, {socket :: gen_tcp:socket()
+-record(state, {socket :: gen_tcp:socket(),
+		self :: binary()
 	       }).
 
 -record(request, {command::atom(), data::binary()}).
@@ -77,7 +77,7 @@ init(Args) ->
 	{error, Reason} ->
 	    {stop, Reason};
 	{ok, Socket} ->
-	    {ok, #state{socket = Socket}, ?TIMEOUT}
+	    {ok, #state{socket = Socket, self = <<>>}, ?TIMEOUT}
     end.
 
 %%--------------------------------------------------------------------
@@ -97,7 +97,7 @@ init(Args) ->
 handle_call(#request{command = Command,
 		     data = Data},
 	    _From,
-	    #state{socket = Socket} = State
+	    #state{socket = Socket, self = Self} = State
 	   ) ->
     case Command of
 	ping ->
@@ -109,8 +109,22 @@ handle_call(#request{command = Command,
 		    {reply, ok, State}
 	    end;
 	auth ->
-	    Auth = serv_pb_chat_pb:encode(Data),
+	    {NewSelf, Password} = Data,
+	    ProtobufAuth = #auth{user = NewSelf, password = Password},
+	    Auth = serv_pb_chat_pb:encode(ProtobufAuth),
 	    case gen_tcp:send(Socket, [3, Auth]) of
+		{error, Reason} ->
+		    {stop, Reason, State};
+		ok ->
+		    {reply, ok, State#state{self = NewSelf}}
+	    end;
+	chat ->
+	    {To, Msg} = Data,
+	    ProtobufChat = #chat{from = Self, to = To, 
+				 time = s(os:timestamp()),
+				 msg = Msg},
+	    Chat = serv_pb_chat_pb:encode(ProtobufChat),
+	    case gen_tcp:send(Socket, [5, Chat]) of
 		{error, Reason} ->
 		    {stop, Reason, State};
 		ok ->
@@ -250,9 +264,30 @@ parse_packat(_) ->
 ping() ->
     gen_server:call(?SERVER,
 		    #request{command = ping}).
--spec login(Name :: binary()) -> undefined | ok.
-login(Name) ->
-    Auth = #auth{user = Name, password = Name},
+-spec login(Self :: binary(), Pasword :: binary()) -> undefined | ok.
+login(Self, Password) ->
+    Auth = {Self, Password},
     gen_server:call(?SERVER,
 		    #request{command = auth,
 			     data = Auth}).
+
+login(Self) ->
+    login(Self, Self).
+
+-spec chat(To :: binary(), Msg :: binary()) -> undefined | ok.
+chat(To, Msg) ->
+    Chat = {To, Msg},
+    gen_server:call(?SERVER,
+		    #request{command = chat,
+			     data = Chat}).
+
+chat(To) ->
+    chat(To, <<"hello!">>).
+
+%% -spec ms(erlang:timestamp()) -> pos_integer().
+%% ms({MegaSecs, Secs, MicroSecs}) ->
+%%     MegaSecs*100000000 + Secs*1000 + MicroSecs.
+
+-spec s(erlang:timestamp()) -> pos_integer().
+s({MegaSecs, Secs, _MicroSecs}) ->
+    MegaSecs*100000 + Secs.
