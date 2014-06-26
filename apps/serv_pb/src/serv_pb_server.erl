@@ -31,14 +31,14 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {transport = {gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
-		socket :: port() | ssl:sslsocket(),   % socket
-		request,                % current request
-		peername :: undefined | {inet:ip_address(), pos_integer()},
-		common_name :: undefined | string(),
-		security,
+		socket = undefined :: undefined | inet:socket() | ssl:sslsocket(),   % socket
+		request = undefined :: term(),                % current request
+		peername = undefined :: undefined | {inet:ip_address(), inet:port_number()},
+		common_name :: undefined | binary(),
+		security = undefined :: term(),
 		retries = 3,
 		response = <<>> :: binary(),
-		session = undefined
+		session = undefined :: term()
 	       }).
 
 %%%===================================================================
@@ -67,7 +67,8 @@ set_socket(Pid, Socket) ->
 -spec sync_send(Pid :: pid(), Message :: binary() | iolist()) ->
 		       ok | {error, Reason :: term()}.
 sync_send(Pid, Message) ->
-    gen_fsm:sync_send_event(Pid, {message, Message}, infinity).
+    gen_fsm:sync_send_event(Pid, {message, Message}).
+
 %% @doc send to client
 -spec send(Pid :: pid(), Message :: binary() | iolist()) -> ok.
 send(Pid, Message) ->
@@ -93,7 +94,7 @@ send(Pid, Message) ->
 -spec init(list()) -> {ok, wait, #state{}}.
 init([]) ->
     serv_pb_stat:update(pbc_connect),
-    {ok, wait, #state{}}.
+    {ok, wait, #state{}, 0}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -109,6 +110,9 @@ init([]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
+wait(timeout, State) ->
+    {next_state, wait, State};
+
 wait(_Event, State) ->
     {next_state, wait, State}.
 %%--------------------------------------------------------------------
@@ -130,7 +134,7 @@ wait(_Event, State) ->
 %% @end
 %%--------------------------------------------------------------------
 wait({set_socket, Socket}, _From,
-		State = #state{transport= {_Transport, Control}}) ->
+     State = #state{transport= {_Transport, Control}}) ->
     case Control:peername(Socket) of
 	{ok, PeerInfo} ->
 	    Control:setopts(Socket, [{active, once}]),
@@ -144,44 +148,36 @@ wait({set_socket, Socket}, _From,
 	    %% It's not really "ok", but there's no reason for the
 	    %% listener to crash just because this socket had an
 	    %% error. See riak_api#54.
-	    {stop, normal, ok, State}
+	    {stop, normal, Reason, State}
     end;
 
 wait(_Event, _From, State) ->
     {reply, unknown_message, wait, State}.
 
+%% ready
 ready(timeout, State) ->
-    %% Flush any protocol messages that have been buffering
-    %% todo, send ping
     {next_state, ready, State};
 
+ready({message, Message}, State) ->
+    {next_state, reply, State#state{response = Message}, 0};
+
 ready(_Event, State) ->
-    {next_state, ready, State#state{response = undefined}}.
+    {next_state, ready, State}.
+
+ready({message, Message}, _From, State) ->
+    {reply, ok, reply, State#state{response = Message}, 0};
 
 ready(_Event, _From, State) ->
-    {reply, unknown_message, ready, State#state{response = undefined}}.
+    {reply, unknown_message, ready, State}.
 
-%% next_state
-reply(timeout, State=#state{response=Response,
-			    socket = Socket,
-			    transport = {Transport, Control}
-			   }) ->
+%% reply
+reply(timeout, State=#state{socket = Socket,
+			    transport = {Transport, Control},
+			    response = Response}) ->
     case Transport:send(Socket, Response) of
 	ok ->
 	    Control:setopts(Socket, [{active, once}]),
-	    {next_state, ready, State, 0};
-	{error, Reason} ->
-	    lager:debug("send error: ~p", [Reason]),
-	    {stop, Reason, State}
-    end;
-
-reply({message, Message}, State=#state{socket = Socket,
-				       transport = {Transport, Control}
-				      }) ->
-    case Transport:send(Socket, Message) of
-	ok ->
-	    Control:setopts(Socket, [{active, once}]),
-	    {next_state, ready, State, 0};
+	    {next_state, ready, State};
 	{error, Reason} ->
 	    lager:debug("send error: ~p", [Reason]),
 	    {stop, Reason, State}
@@ -190,30 +186,15 @@ reply({message, Message}, State=#state{socket = Socket,
 reply(_Event, State) ->
     {next_state, ready, State}.
 
-reply({message, Message}, _From, State=#state{socket = Socket,
-					      transport = {Transport, Control}
-					     }) ->
-    case Transport:send(Socket, Message) of
-	ok ->
-	    Control:setopts(Socket, [{active, once}]),
-	    {reply, ok, ready, State, 0};
-	{error, Reason} ->
-	    lager:debug("send error: ~p", [Reason]),
-	    {stop, Reason, Reason, State}
-    end;
-
 reply(_Event, _From, State) ->
     {reply, unknown_message, ready, State}.
 
-reply_then_stop(timeout, State=#state{response=Response,
-				      socket = Socket,
-				      transport = {Transport, _Control}
-				     }) ->
+% reply then stop
+reply_then_stop(_Event, State=#state{response=Response,
+				     socket = Socket,
+				     transport = {Transport, _Control}
+				    }) ->
     Transport:send(Socket, Response),
-
-    {stop, normal, State};
-
-reply_then_stop(_Event, State) ->
     {stop, normal, State}.
 
 reply_then_stop(_Event, _From, State) ->
@@ -231,6 +212,7 @@ reply_then_stop(_Event, _From, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
+
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -268,34 +250,42 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 %% @doc The handle_info/3 gen_fsm callback.
-handle_info({tcp_closed, Socket}, _SN, State=#state{socket = Socket}) ->
-    {stop, normal, State};
+handle_info({tcp_closed, _Socket}, _StateName, State) ->
+    {stop, normal, State#state{socket = undefined}};
 
-handle_info({tcp_error, Socket, _Reason}, _SN, State=#state{socket=Socket}) ->
-    {stop, normal, State};
+handle_info({tcp_error, _Socket, _Reason}, _StateName, State) ->
+    {stop, normal, State#state{socket = undefined}};
+
+handle_info({tcp, Socket, _Data}, handle_info, State) ->
+    %% req =/= undefined: received a new request while another was in
+    %% progress -> Error
+    lager:debug("Received a new PB socket request"
+		" while another was in progress"),
+    Response = encode(#response{errmsg = <<"last request not done">>,
+				errcode = 4}),
+    {next_state, reply_then_stop, State#state{socket = Socket,
+					      response = Response}};
 
 handle_info({tcp, Socket, Packet}, _StateName,
-	    State=#state{request=undefined,
-			 socket=Socket,
-			 session=Session
-			}) ->
+	    State = #state{request=undefined,
+			   socket=Socket,
+			   session=Session}) ->
     case parse_packat(Packet) of
 	undefined ->
 	    lager:debug("recved: [~p]", [Packet]),
 	    BadPkg = encode(#response{errmsg = <<"bad packet">>,
 				      errcode = 1}),
-	    {next_state, reply, State#state{response = BadPkg}, 0};
+	    {next_state, reply, State#state{response = BadPkg}};
 	{MsgCode, MsgData} ->
 	    lager:debug("recved: {~p, ~p}", [MsgCode, MsgData]),
 	    NotImpl = encode(#response{errmsg = <<"not implement">>,
 				       errcode = 2}),
 	    InternalErr = encode(#response{errmsg = <<"internal error">>,
 					   errcode = 3}),
-	    %%try
 	    case serv_pb_handler:lookup(MsgCode) of
 		undefined ->
 		    lager:warning("unregistered message: ~p", [MsgCode]),
-		    {next_state, reply, State#state{response = NotImpl}, 0};
+		    {next_state, reply, State#state{response = NotImpl}};
 		Handler when is_atom(Handler) ->
 		    case Handler:handle(MsgData, Session) of
 			{noreply, nochange} ->
@@ -315,29 +305,12 @@ handle_info({tcp, Socket, Packet}, _StateName,
 			     State#state{response = InternalErr}, 0}
 		    end
 	    end
-	    %% catch
-	    %% 	%% Tell the client we errored before closing the connection.
-	    %% 	_Type:_Failure ->
-	    %% 	    lager:error("handle msg: {~p, ~p}", [MsgCode, MsgData]),
-	    %% 	    {next_state, reply_then_stop,
-	    %% 	     State#state{response = InternalErr}, 0}
-	    %% end
     end;
-
-handle_info({tcp, Socket, _Data}, _SN, State) ->
-    %% req =/= undefined: received a new request while another was in
-    %% progress -> Error
-    lager:debug("Received a new PB socket request"
-		" while another was in progress"),
-    Response = encode(#response{errmsg = <<"last request not done">>,
-				errcode = 4}),
-    {next_state, reply_then_stop, State#state{socket = Socket,
-					      response = Response}, 0};
 
 handle_info(Message, StateName, State) ->
     %% Throw out messages we don't care about, but log them
     lager:error("Unrecognized message ~p", [Message]),
-    {next_state, StateName, State, 0}.
+    {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -350,7 +323,13 @@ handle_info(Message, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, _State) ->
+terminate(_Reason, _StateName,
+	  #state{socket = undefined}) ->
+    ok;
+
+terminate(_Reason, _StateName,
+	 #state{socket = Socket, transport = {Transport, _Control}}) ->
+    Transport:close(Socket),
     ok.
 
 %%--------------------------------------------------------------------

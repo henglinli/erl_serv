@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author  <lee@lee>
-%%% @copyright (C) 2014, 
+%%% @copyright (C) 2014,
 %%% @doc
 %%%
 %%% @end
@@ -19,18 +19,19 @@
 -spec handle(Auth :: binary(), Session :: term()) ->
 		    {noreply | term(), nochange | term()}.
 handle(Auth, _Session) ->
+    Ok = #response{errcode = 0, errmsg = <<"OK">>},
+    EncodedOk = serv_pb_base_pb:encode(Ok),
     case serv_pb_chat_pb:decode(auth, Auth) of
-	#auth{user = User, password = Password} ->
-	    lager:info("~p:~p", [User, Password]),
+	#auth{user = User, password = _Password} ->
 	    case erlang:get(User) of
 		undefined ->
-		    riak_core_metadata:put({<<"session">>, <<"user">>}, User, {pid, erlang:self()});
+		    %% visiable to cluster
+		    lager:info("put {~p, {pid, ~p}}", [User, erlang:self()]),
+		    riak_core_metadata:put({<<"session">>, <<"user">>}, User, {pid, erlang:self()}),
+		    {[0, EncodedOk], #session{user = User}};
 		{pid, _Pid} ->
-		    undefined
-	    end,
-	    Ok = #response{errcode = 0, errmsg = <<"OK">>},
-	    EncodedOk = serv_pb_base_pb:encode(Ok),
-	    {[0, EncodedOk], #session{user = User}};
+		    {[0, EncodedOk], nochange}
+	    end;
 	_Other ->
 	    Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},
 	    EncodedError = serv_pb_base_pb:encode(Error),

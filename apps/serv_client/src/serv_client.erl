@@ -246,11 +246,11 @@ handle_sync_event(_Event, _From, StateName, State) ->
 %%--------------------------------------------------------------------
 handle_info({tcp_closed, _Socket}, _StateName, State) ->
     lager:info("connection closed", []),
-    {stop, normal, State};
+    {stop, normal, State#state{socket = undefined}};
 
 handle_info({tcp_error, _Socket, Reason}, _StateName, State) ->
     lager:info("connection error: ~p", [Reason]),
-    {stop, Reason, State};
+    {stop, Reason, State#state{socket = undefined}};
 
 handle_info({tcp, Socket, Data}, StateName, State) ->
     case handle_packet(Data) of
@@ -315,7 +315,11 @@ handle_packet(Packet) ->
 		= serv_pb_base_pb:decode(response, MsgData),
 	    lager:info("recved: {~p, ~p}", [ErrCode, ErrMsg]),
 	    noreply;
-
+	{6, MsgData} ->
+	    #chat{from = From, to = To, msg = Msg, time = Time} 
+		= serv_pb_chat_pb:decode(chat, MsgData),
+	    lager:info("{~p, ~p, ~p, ~p}", [Time, From, To, Msg]),
+	    noreply;
 	{MsgCode, MsgData} ->
 	    %Response = serv_pb_codec:decode(MsgCode, MsgData),
 	    lager:info("recved: [~p: ~p]", [MsgCode, MsgData]),

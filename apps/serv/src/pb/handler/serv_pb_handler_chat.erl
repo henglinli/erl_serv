@@ -17,23 +17,31 @@
 handle(Chat, Session) ->
     Ok = #response{errcode = 0, errmsg = <<"OK">>},
     EncodedOk = serv_pb_base_pb:encode(Ok),
-    User = Session#session.user,
+    Self = Session#session.user,
     case serv_pb_chat_pb:decode(chat, Chat) of
-	ProtobufChat = #chat{from = User, to = To} ->
+	#chat{from = Self, to = To} ->
 	    lager:info("chat to ~p", [To]),
-	    case erlang:get(To) of
-		undefined ->
-		    case riak_core_metadata:get({<<"session">>, <<"user">>}, To) of
+	    case To of
+		Self ->
+		    {[0, EncodedOk], nochange};
+		_To ->
+		    case erlang:get(To) of
 			undefined ->
-			    lager:info("save ~p's message",[To]),
-			    {[0, EncodedOk], nochange};
+			    case riak_core_metadata:get({<<"session">>, <<"user">>}, To) of
+				undefined ->
+				    lager:info("save ~p's message",[To]),
+				    {[0, EncodedOk], nochange};
+				{pid, ToPid} ->
+				    lager:info("get {~p, {pid, ~p}}", [To, ToPid]),
+				    _Ignore = erlang:put(To, {pid, ToPid}),
+				    %% send message to ToPid
+				    serv_pb_server:send(ToPid, [6, Chat]),
+				    {[0, EncodedOk], nochange}
+			    end;
 			{pid, ToPid} ->
-			    serv_pb_server:send(ToPid, ProtobufChat),
+			    serv_pb_server:send(ToPid, [6, Chat]),
 			    {[0, EncodedOk], nochange}
-		    end;
-		{pid, ToPid} ->
-		    serv_pb_server:send(ToPid, ProtobufChat),
-		    {[0, EncodedOk], nochange}
+		    end
 	    end;
 	_Other ->
 	    Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},
