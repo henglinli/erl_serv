@@ -60,7 +60,9 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %% @doc The connection initiation callback for gen_nb_server, called
 %% when a new socket is accepted.
--spec new_connection(port(), #state{}) -> {ok, #state{}}.
+-spec new_connection(inet:socket(), State::term()) ->
+			    {ok, NewState::term()} |
+			    {stop, Reason::term(), NewState::term()}.
 new_connection(Socket, State) ->
     {ok, Pid} = serv_pb_server_sup:start_socket(),
     ok = gen_tcp:controlling_process(Socket, Pid),

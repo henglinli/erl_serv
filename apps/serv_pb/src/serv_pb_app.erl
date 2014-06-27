@@ -2,6 +2,8 @@
 
 -behaviour(application).
 
+-define(DEFAULT_LIMIT, 100000).
+
 %% Application callbacks
 -export([start/2, stop/1]).
 -export([register_stat/0]).
@@ -19,7 +21,24 @@
       StartArgs :: term(),
       Reason :: term().
 start(_StartType, _StartArgs) ->
+    %% start deps
     riak_core_util:start_app_deps(serv_pb),
+    %% start sidejob supervisor
+    case app_helper:get_env(serv_pb, client_limit, ?DEFAULT_LIMIT) of
+	undfined ->
+	    ok;
+	Limit ->
+	    sidejob:new_resource(serv_pb_server_sj, sidejob_supervisor, Limit)
+    end,
+
+%%     case app_helper:get_env(serv_pb, direct_stats, false) of
+%%         true ->
+%%             ok;
+%%         false ->
+%%             sidejob:new_resource(serv_pb_stat_sj, serv_pv_stat_worker, 10000)
+%%     end,
+
+    %% start serv_pb_sup
     case serv_pb_sup:start_link() of
 	ignore ->
 	    {error, ignore};

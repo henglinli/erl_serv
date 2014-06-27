@@ -7,6 +7,7 @@
                   kernel,
                   stdlib,
 		  lager,
+		  sidejob,
 		  riak_core
                  ]},
   {mod, { serv_pb_app, []}},
