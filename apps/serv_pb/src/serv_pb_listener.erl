@@ -64,10 +64,15 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 			    {ok, NewState::term()} |
 			    {stop, Reason::term(), NewState::term()}.
 new_connection(Socket, State) ->
-    {ok, Pid} = serv_pb_server_sup:start_socket(),
-    ok = gen_tcp:controlling_process(Socket, Pid),
-    ok = serv_pb_server:set_socket(Pid, Socket),
-    {ok, State}.
+    %%{ok, Pid} = serv_pb_server_sup:start_socket(),
+    case serv_pb_server:start_link() of
+	{ok, Pid} ->
+	    ok = gen_tcp:controlling_process(Socket, Pid),
+	    ok = serv_pb_server:set_socket(Pid, Socket),
+	    {ok, State};
+	{error, Reason}->
+	    {stop, Reason, State}
+    end.
 
 get_listeners() ->
     Listeners = app_helper:get_env(serv_pb, pb, [{"127.0.0.1", 8087}]),

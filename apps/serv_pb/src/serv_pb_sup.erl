@@ -74,11 +74,14 @@ init([]) ->
 
     Handler = ?CHILD(serv_pb_handler, worker),
 
-    ServerSup = ?CHILD(serv_pb_server_sup, supervisor),
-
     Listener = pb_listener_specs(serv_pb_listener:get_listeners()),
-
-    {ok, {SupFlags, [Session, Handler, ServerSup, Listener]}}.
+    case erlang:whereis(serv_pb_server_sj) of
+	undefined ->
+	    ServerSup = ?CHILD(serv_pb_server_sup, supervisor),
+	    {ok, {SupFlags, [Session, Handler, ServerSup, Listener]}};
+	_SideJob ->
+	    {ok, {SupFlags, [Session, Handler, Listener]}}
+    end.
 
 %%%===================================================================
 %%% Internal functions

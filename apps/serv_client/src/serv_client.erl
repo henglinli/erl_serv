@@ -16,13 +16,14 @@
 -include_lib("serv/include/serv_pb_chat_pb.hrl").
 
 %% API
--export([start/0]).
--export([stop/0,
-	 connect/0, connect/1, connect/2,
-	 login/0, login/1, login/2,
-	 ping/0,
-	 chat/1, chat/2
+-export([start_link/0, stop/1]).
+-export([connect/3, connect/1, connect/2,
+	 login/3, login/1, login/2,
+	 ping/1,
+	 chat/3, chat/2
 	]).
+%% test
+-export([test/1]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
@@ -32,8 +33,6 @@
 -export([do_connect/2, do_connect/3,
 	 do_login/2, do_login/3,
 	 do_request/2, do_request/3]).
-
--define(SERVER, ?MODULE).
 
 -define(TIMEOUT, 3600).
 
@@ -57,7 +56,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_fsm:start_link(?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -316,7 +315,7 @@ handle_packet(Packet) ->
 	    lager:info("recved: {~p, ~p}", [ErrCode, ErrMsg]),
 	    noreply;
 	{6, MsgData} ->
-	    #chat{from = From, to = To, msg = Msg, time = Time} 
+	    #chat{from = From, to = To, msg = Msg, time = Time}
 		= serv_pb_chat_pb:decode(chat, MsgData),
 	    lager:info("{~p, ~p, ~p, ~p}", [Time, From, To, Msg]),
 	    noreply;
@@ -335,55 +334,48 @@ parse_packat(<<MsgCode:8/big-unsigned-integer,
 parse_packat(_) ->
     undefined.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% utils
-%%
-start() ->
-    lager:start(),
-    start_link().
-
 %% stop
-stop() ->
-    gen_fsm:sync_send_all_state_event(?SERVER, stop).
+stop(Pid) ->
+    gen_fsm:sync_send_all_state_event(Pid, stop).
 
 %% connect
--spec connect(inet:ip_address() | inet:hostname(), inet:port_number()) ->
+-spec connect(pid(), inet:ip_address() | inet:hostname(), inet:port_number()) ->
 		     ok | {error, inet:posix()}.
-connect(Host, Port) ->
-    gen_fsm:sync_send_event(?SERVER, {connect, Host, Port}).
+connect(Pid, Host, Port) ->
+    gen_fsm:sync_send_event(Pid, {connect, Host, Port}).
 
-connect(Port) ->
-    connect("localhost", Port).
+connect(Pid, Port) ->
+    connect(Pid, "localhost", Port).
 
-connect() ->
-    connect("localhost", 8087).
+connect(Pid) ->
+    connect(Pid, "localhost", 8087).
 
 %% login
--spec login(Self :: binary(), Pasword :: binary()) ->
+-spec login(Pid :: pid(), Self :: binary(), Pasword :: binary()) ->
 		   ok | {error, term()}.
-login(Self, Pasword) ->
-    gen_fsm:sync_send_event(?SERVER, {login, Self, Pasword}).
+login(Pid, Self, Pasword) ->
+    gen_fsm:sync_send_event(Pid, {login, Self, Pasword}).
 
-login(Self) ->
-    login(Self, Self).
+login(Pid, Self) ->
+    login(Pid, Self, Self).
 
-login() ->
-    login(<<"lee">>, <<"lee">>).
+login(Pid) ->
+    login(Pid, <<"lee">>, <<"lee">>).
 
 %% ping
--spec ping() -> ok | {error, term()}.
-ping() ->
-    gen_fsm:sync_send_all_state_event(?SERVER, ping).
+-spec ping(pid()) -> ok | {error, term()}.
+ping(Pid) ->
+    gen_fsm:sync_send_all_state_event(Pid, ping).
 
 %% chat
--spec chat(To :: binary(), Msg :: binary()) -> undefined | ok.
-chat(To, Msg) ->
+-spec chat(Pid :: pid(), To :: binary(), Msg :: binary()) -> undefined | ok.
+chat(Pid, To, Msg) ->
     Chat = {To, Msg},
-    gen_fsm:sync_send_event(?SERVER,
-			    #request{command = chat,
-				     data = Chat}).
+    gen_fsm:sync_send_event(Pid, #request{command = chat,
+					  data = Chat}).
 
-chat(To) ->
-    chat(To, <<"hello!">>).
+chat(Pid, To) ->
+    chat(Pid, To, <<"hello!">>).
 
 %% -spec ms(erlang:timestamp()) -> pos_integer().
 %% ms({MegaSecs, Secs, MicroSecs}) ->
@@ -392,3 +384,31 @@ chat(To) ->
 -spec s(erlang:timestamp()) -> pos_integer().
 s({MegaSecs, Secs, _MicroSecs}) ->
     MegaSecs*100000 + Secs.
+
+%%
+-spec test(Clients :: pos_integer()) -> term().
+test(Clients) ->
+    test_helper(Clients, 1).
+
+test_helper(0, _Done) ->
+    ok;
+
+test_helper(Do, Done) ->
+    case do_test(Done) of
+	ok ->
+	    test_helper(Do - 1, Done + 1);
+	error ->
+	    error
+    end.
+
+do_test(Do) ->
+    DoBin = erlang:integer_to_binary(Do),
+    User = <<"lee@", DoBin/binary>>,
+    case serv_client_sup:start_child() of
+	{ok , Pid} ->
+	    serv_client:connect(Pid),
+	    serv_client:login(Pid, User),
+	    ok;
+	{error, _Reason} ->
+	    error
+    end.
