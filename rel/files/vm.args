@@ -13,8 +13,8 @@
 +A 5
 
 ## Increase number of concurrent ports/sockets
--env ERL_MAX_PORTS 409600
--env ERTS_MAX_PORTS 409600
+-env ERL_MAX_PORTS 262144
+-env ERTS_MAX_PORTS 262144
 
 ## Tweak GC to run more often
 -env ERL_FULLSWEEP_AFTER 10

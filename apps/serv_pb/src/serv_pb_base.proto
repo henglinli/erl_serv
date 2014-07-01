@@ -1,7 +1,30 @@
 // HenryLee<henglinli@gmail.com>
 
-// Error response - may be generated for any Req
+// common error response - may be generated for any Req
+// fix registered as 0
 message response {
-    required bytes errmsg = 1;
-    required uint32 errcode = 2;
+  // error message
+  required bytes errmsg = 1;
+  // error message code
+  required uint32 errcode = 2;
+}
+
+// ping
+// fix registered as 1
+message ping {
+}
+
+// auth
+// fix registered as 3
+message auth {
+  enum type {
+    register = 1;
+    login = 2;
+  }
+  // user name
+  required bytes user = 1;
+  // user password
+  required bytes password = 2;
+  // auth type
+  required uint32 how = 3;
 }

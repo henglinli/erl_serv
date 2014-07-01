@@ -4,13 +4,6 @@
 message session {
     required bytes user = 1;
 }
-
-// auth
-message auth {
-  required bytes user = 1;
-  required bytes password = 2;
-}
-
 // chat
 message chat {
   required bytes from = 1;

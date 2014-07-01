@@ -4,12 +4,13 @@
   {vsn, "0.0.1"},
   {registered, []},
   {applications, [
-                  kernel,
-                  stdlib,
+		  kernel,
+		  stdlib,
 		  lager,
+		  gproc,
 		  sidejob,
 		  riak_core
-                 ]},
+		 ]},
   {mod, { serv_pb_app, []}},
   {env, []}
  ]}.

@@ -30,15 +30,15 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {ets_tab :: ets:tab()}).
+-record(state, {ets_tab = undefined :: undefined | ets:tab()}).
 
 %% handle message
--callback handle(Request :: term(), Session :: term()) ->
+-callback handle(Request :: term(), States :: orddict:orddict()) ->
     {error, Reason :: term()} |
     {noreply, nochange} |
-    {noreply, Session :: term()} |
+    {noreply, NewStates :: orddict:orddict()} |
     {Response :: binary(), nochange} |
-    {Response :: binary(), NewSession :: term()}.
+    {Response :: binary(), NewStates :: orddict:orddict()}.
 
 %%%===================================================================
 %%% API

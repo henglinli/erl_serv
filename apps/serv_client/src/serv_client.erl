@@ -17,13 +17,16 @@
 
 %% API
 -export([start_link/0, stop/1]).
--export([connect/3, connect/1, connect/2,
+-export([connect/5, connect/3, connect/1, connect/2,
 	 login/3, login/1, login/2,
 	 ping/1,
 	 chat/3, chat/2
 	]).
 %% test
--export([test/1]).
+-export([test/1,
+	 login_one/0,
+	 chat_test/0
+	]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
@@ -37,7 +40,8 @@
 -define(TIMEOUT, 3600).
 
 -record(state, {socket = undefined :: undefined | gen_tcp:socket(),
-		self = <<>> :: binary()}).
+		self = <<>> :: binary(),
+		password = <<>> :: binary()}).
 
 -record(request, {command = undefined ::atom(),
 		  data = <<>> ::binary()}).
@@ -127,17 +131,46 @@ do_connect({connect, Host, Port}, _From, State) ->
 	    {reply, ok, do_login, State#state{socket = Socket}}
     end;
 
+do_connect({connect_then_login, Host, Port, User, Password}, _From, State) ->
+    case gen_tcp:connect(Host, Port,
+			 [{send_timeout, ?TIMEOUT},
+			  {mode, binary},
+			  {active, true},
+			  {packet, 2}
+			 ]) of
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	{ok, Socket} ->
+	    lager:info("connected {~p, ~p}", [Host, Port]),
+	    {reply, ok, do_login, State#state{socket = Socket,
+					      self = User,
+					      password = Password}, 0}
+    end;
+
 do_connect(_Event, _From, State) ->
-    {reply, not_impl, do_connect, State}.
+    {reply, "Need connect", do_connect, State}.
 
 %% do login
+do_login(timeout, State = #state{socket = Socket,
+				 self = NewSelf,
+				 password = Password}) ->
+    ProtobufAuth = #auth{user = NewSelf, password = Password, how = 2},
+    Auth = serv_pb_base_pb:encode(ProtobufAuth),
+    case gen_tcp:send(Socket, [3, Auth]) of
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	ok ->
+	    lager:info("login sent {~p}!", [NewSelf]),
+	    {next_state, do_request, State}
+    end;
+
 do_login(_Event, State) ->
     {next_state, do_login, State}.
 
 do_login({login, NewSelf, Password}, _From,
 	 State = #state{socket = Socket}) ->
-    ProtobufAuth = #auth{user = NewSelf, password = Password},
-    Auth = serv_pb_chat_pb:encode(ProtobufAuth),
+    ProtobufAuth = #auth{user = NewSelf, password = Password, how = 2},
+    Auth = serv_pb_base_pb:encode(ProtobufAuth),
     case gen_tcp:send(Socket, [3, Auth]) of
 	{error, Reason} ->
 	    {stop, Reason, {error, Reason}, State};
@@ -146,7 +179,7 @@ do_login({login, NewSelf, Password}, _From,
     end;
 
 do_login(_Event, _From, State) ->
-    {reply, not_impl, do_login, State}.
+    {reply, unknown_message, do_login, State}.
 
 %% do request
 do_request(_Event, State) ->
@@ -339,6 +372,12 @@ stop(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, stop).
 
 %% connect
+-spec connect(pid(), inet:ip_address() | inet:hostname(), inet:port_number(),
+	      binary(), binary()) ->
+		     ok | {error, inet:posix()}.
+connect(Pid, Host, Port, User, Password) ->
+    gen_fsm:sync_send_event(Pid, {connect_then_login, Host, Port, User, Password}).
+
 -spec connect(pid(), inet:ip_address() | inet:hostname(), inet:port_number()) ->
 		     ok | {error, inet:posix()}.
 connect(Pid, Host, Port) ->
@@ -409,6 +448,34 @@ do_test(Do) ->
 	    serv_client:connect(Pid),
 	    serv_client:login(Pid, User),
 	    ok;
+	{error, _Reason} ->
+	    error
+    end.
+
+login_one() ->
+    application:start(serv_client),
+    case serv_client_sup:start_child() of
+	{ok , Pid} ->
+	    serv_client:connect(Pid, "localhost", 8087, <<"lee">>, <<"lee">>),
+	    ok;
+	{error, _Reason} ->
+	    error
+    end.
+
+chat_test() ->
+    application:start(serv_client),
+    case serv_client_sup:start_child() of
+	{ok, Pid} ->
+	    ok = serv_client:connect(Pid, "localhost", 8087, <<"lee">>, <<"lee">>),
+	    case serv_client_sup:start_child() of
+		{ok, Pid1} ->
+		    ok = serv_client:connect(Pid1, "localhost", 8087, <<"google">>, <<"google">>),
+		    ok = serv_client:chat(Pid1),
+		    ok = serv_client:chat(Pid),
+		    ok;
+		{error, _Reason} ->
+		    error
+	    end;
 	{error, _Reason} ->
 	    error
     end.
