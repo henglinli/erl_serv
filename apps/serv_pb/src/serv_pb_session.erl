@@ -20,7 +20,10 @@
 -export([ets/0, sessions/0,
 	 insert/2, delete/1, lookup/1
 	]).
-
+-ifndef(SIMPLE_API).
+% normal api
+-export([register/1, unregister/1]).
+-endif.
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
@@ -90,55 +93,40 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+
 %% get
 handle_call(ets, _From, State = #state{ets_tab = EtsTab}) ->
-    case ets:info(EtsTab) of
-	undefined ->
-	    {reply, undefined, State};
-	InfoList when is_list(InfoList) ->
-	    {reply, EtsTab, State}
-    end;
+    {reply, EtsTab, State};
+
 %% all
 handle_call(sessions, _From, State = #state{ets_tab = EtsTab}) ->
-    case ets:info(EtsTab) of
-	undefined ->
-	    {reply, undefined, State};
-	InfoList when is_list(InfoList) ->
-	    Result = ets:tab2list(EtsTab),
-	    {reply, Result, State}
-    end;
+    Result = ets:tab2list(EtsTab),
+    {reply, Result, State};
+
 %% insert
-handle_call({Key, Value}, _From, State = #state{ets_tab = EtsTab}) ->
-    case ets:info(EtsTab) of
-	undefined ->
-	    {reply, undefined, State};
-	InfoList when is_list(InfoList) ->
-	    Result = ets:insert(EtsTab, {Key, Value}),
-	    {reply, Result, State}
-    end;
+handle_call({insert, Key, Value}, _From, State = #state{ets_tab = EtsTab}) ->
+    Result = ets:insert(EtsTab, {Key, Value}),
+    {reply, Result, State};
+
 %% delete
 handle_call({delete, Key}, _From, State = #state{ets_tab = EtsTab}) ->
-    case ets:info(EtsTab) of
-	undefined ->
-	    {reply, undefined, State};
-	InfoList when is_list(InfoList) ->
-	    Result = ets:delete(EtsTab, Key),
-	    {reply, Result, State}
-    end;
+    Result = ets:delete(EtsTab, Key),
+    {reply, Result, State};
+
+%% unregister
+handle_call({unregister, Key, Value}, _From, State = #state{ets_tab = EtsTab}) ->
+    Result = ets:delete_object(EtsTab, {Key, Value}),
+    {reply, Result, State};
+
 %% lookup
 handle_call({lookup, Key}, _From, State = #state{ets_tab = EtsTab}) ->
-    case ets:info(EtsTab) of
-	undefined ->
+    case ets:lookup(EtsTab, Key) of
+	[] ->
 	    {reply, undefined, State};
-	InfoList when is_list(InfoList) ->
-	    case ets:lookup(EtsTab, Key) of
-		[] ->
-		    {reply, undefined, State};
-		[Session] ->
-		    {reply, Session, State}
-	    end
+	Session ->
+	    {reply, Session, State}
     end;
-%%
+%% other
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -195,7 +183,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%%===================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================3======================
+-ifdef(SIMPLE_API).
 -spec ets() -> atom().
 ets() ->
     ?ETS_SERV_SESSION_NAME.
@@ -206,15 +195,44 @@ sessions() ->
 
 -spec insert(binary(), term()) -> undefined | true.
 insert(Key, Value)
-  when is_binary(Key) ->
+  when erlang:is_binary(Key) ->
     ets:insert(?ETS_SERV_SESSION_NAME, {Key, Value}).
 
 -spec delete(binary()) -> undefined | true.
 delete(Key)
-  when is_binary(Key) ->
+  when erlang:is_binary(Key) ->
     ets:delete(?ETS_SERV_SESSION_NAME, Key).
 
 -spec lookup(binary()) -> [tuple()].
 lookup(Key)
-  when is_binary(Key) ->
+  when erlang:is_binary(Key) ->
     ets:lookup(?ETS_SERV_SESSION_NAME, Key).
+%% normal api
+-else.
+-spec ets() -> atom().
+ets() ->
+    gen_server:call(?SERVER, ets).
+-spec sessions() -> [tuple()].
+sessions() ->
+    gen_server:call(?SERVER, sessions).
+-spec insert(binary(), term()) -> undefined | true.
+insert(Key, Value)
+  when erlang:is_binary(Key) ->
+    gen_server:call(?SERVER, {insert, Key, Value}).
+-spec register(binary()) -> undefined | true.
+register(Key)
+  when erlang:is_binary(Key) ->
+    insert(Key, {pid, erlang:self()}).
+-spec delete(binary()) -> undefined | true.
+delete(Key)
+  when erlang:is_binary(Key) ->
+    gen_server:call(?SERVER, {delete, Key}).
+-spec unregister(binary()) -> undefined | true.
+unregister(Key)
+  when erlang:is_binary(Key) ->
+    gen_server:call(?SERVER, {unregister, Key, {pid, erlang:self()}}).
+-spec lookup(binary()) -> [tuple()].
+lookup(Key)
+  when erlang:is_binary(Key) ->
+    gen_server:call(?SERVER, {lookup, Key}).
+-endif.

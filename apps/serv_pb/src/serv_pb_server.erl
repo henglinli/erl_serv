@@ -78,18 +78,25 @@ set_socket(Pid, Socket) ->
     gen_fsm:sync_send_event(Pid, {set_socket, Socket}, infinity).
 
 %% @doc sync send to client
--spec sync_send(Pid :: pid(), Message :: binary() | iolist()) ->
-		       ok | {error, Reason :: term()}.
-sync_send(Pid, Message) ->
-    gen_fsm:sync_send_event(Pid, {message, Message}).
+-spec sync_send(Who :: binary(), Message :: binary() | iolist()) ->
+		       [term()] | {error, Reason :: term()}.
+sync_send(Who, Message)
+  when erlang:is_binary(Who) ->
+    case serv_pb_session:lookup(Who) of
+	undefined ->
+	    {error, not_found};
+	Sessions ->
+	    lists:map(fun({_Who, {pid, Pid}}) ->
+			      gen_fsm:sync_send_event(Pid, {message, Message})
+		      end,
+		      Sessions)
+    end.
 
 %% @doc send to client
--spec send(To :: pid() | binary(), Message :: binary() | iolist()) -> ok.
-send(Pid, Message) when erlang:is_pid(Pid) ->
-    gen_fsm:send_event(Pid, {message, Message});
-
-send(Name, Message) when erlang:is_binary(Name) ->
-    gproc:send({p, l, Name}, {message, Message}).
+-spec send(Who :: binary(), Message :: binary() | iolist()) ->
+		  ok | {error, Reason :: term()}.
+send(Name, _Message) when erlang:is_binary(Name) ->
+    {error, not_impl}.
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -185,9 +192,6 @@ wait_for_auth(_Event, _From, State) ->
     {reply, unknown_message, wait_for_auth, State}.
 
 %% ready
-ready({message, Message}, State) ->
-    {next_state, reply, State#state{response = Message}, 0};
-
 ready(_Event, State) ->
     {next_state, ready, State}.
 
@@ -303,7 +307,7 @@ handle_info({tcp, Socket, _Data}, handle_info, State) ->
 handle_info({tcp, Socket, Packet}, wait_for_auth,
 	    State = #state{request=undefined,
 			   socket=Socket,
-			   peername = PeerInfo}) ->
+			   peername = _PeerInfo}) ->
     Ok = encode(#response{errmsg = <<"Ok">>,
 			  errcode = 0}),
     BadPacket = encode(#response{errmsg = <<"bad packet">>,
@@ -332,13 +336,15 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
 			    {next_state, reply_then_stop,
 			     State#state{response = Ok}, 0};
 			2 -> % login
-			    case gproc:add_local_property(User, PeerInfo) of
+			    case serv_pb_session:register(User) of
 				true ->
 				    riak_core_metadata:put({<<"session">>, <<"user">>}, User, {pid, erlang:self()}),
 				    %% todo: check password and store
-				    {next_state, reply, State#state{response = Ok}, 0};
+				    {next_state, reply,
+				     State#state{response = Ok,
+						 session = User}, 0};
 				_Other ->
-				    lager:error("gproc:add_local_property/2 failed"),
+				    lager:error("serv_pb_session:register/2 failed"),
 				    {next_state, reply_then_stop,
 				     State#state{response = InternalErr}, 0}
 			    end;
@@ -407,6 +413,17 @@ handle_info({tcp, Socket, Packet}, _StateName,
 handle_info({message, Message}, ready, State) ->
     {next_state, reply,
      State#state{response = Message}, 0};
+handle_info({'DOWN', MonitorRef, _Type, Object, _Info}, StateName,
+	    State = #state{}) ->
+    case erlang:get(Object) of
+	undefined ->
+	    continue;
+	{user, User} ->
+	    _Ignore = erlang:erase(User),
+	    _Ignore = erlang:erase(Object)
+    end,
+    _Result = erlang:demonitor(MonitorRef, [flush]),
+    {next_state, StateName, State};
 % unknown mesasge
 handle_info(Message, StateName, State) ->
     %% Throw out messages we don't care about, but log them
@@ -425,13 +442,22 @@ handle_info(Message, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName,
-	  #state{socket = undefined}) ->
-    done;
-
-terminate(_Reason, _StateName,
-	 #state{socket = Socket, transport = {Transport, _Control}}) ->
-    Transport:close(Socket),
-    done.
+	 #state{socket = Socket,
+		transport = {Transport, _Control},
+		session = User}) ->
+    case Socket of
+	undefined ->
+	    continue;
+	_Socket ->
+	    Transport:close(Socket)
+    end,
+    case User of
+	undefined ->
+	    done;
+	_User ->
+	    serv_pb_session:unregister(User),
+	    done
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

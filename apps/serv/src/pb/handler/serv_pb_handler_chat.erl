@@ -27,19 +27,34 @@ handle(Chat, Session) ->
 		_To ->
 		    case erlang:get(To) of
 			undefined ->
-			    case riak_core_metadata:get({<<"session">>, <<"user">>}, To) of
+			    case serv_pb_session:lookup(To) of
 				undefined ->
-				    lager:info("save ~p's message",[To]),
-				    {[0, EncodedOk], nochange};
+				    case riak_core_metadata:get({<<"session">>, <<"user">>}, To) of
+					undefined ->
+					    lager:info("save ~p's message",[To]),
+					    {[0, EncodedOk], nochange};
+					{pid, ToPid} ->
+					    lager:info("cluster get {~p, {pid, ~p}}", [To, ToPid]),
+					    _Ignore = erlang:put(To, {pid, ToPid}),
+					    _Ignore = erlang:put(ToPid, {user, To}),
+					    %% send message to ToPid
+					    serv_pb_server:sync_send(ToPid, [6, Chat]),
+					    {[0, EncodedOk], nochange}
+				    end;
 				{pid, ToPid} ->
-				    lager:info("get {~p, {pid, ~p}}", [To, ToPid]),
+				    lager:info("sesssion get {~p, {pid, ~p}}", [To, ToPid]),
 				    _Ignore = erlang:put(To, {pid, ToPid}),
+				    _Ignore = erlang:put(ToPid, {user, To}),
 				    %% send message to ToPid
-				    serv_pb_server:send(ToPid, [6, Chat]),
+				    serv_pb_server:sync_send(ToPid, [6, Chat]),
 				    {[0, EncodedOk], nochange}
 			    end;
 			{pid, ToPid} ->
-			    serv_pb_server:send(ToPid, [6, Chat]),
+			    lager:info("dic get {~p, {pid, ~p}}", [To, ToPid]),
+			    _Ignore = erlang:put(To, {pid, ToPid}),
+			    _Ignore = erlang:put(ToPid, {user, To}),
+			    %% send message to ToPid
+			    serv_pb_server:sync_send(ToPid, [6, Chat]),
 			    {[0, EncodedOk], nochange}
 		    end
 	    end;

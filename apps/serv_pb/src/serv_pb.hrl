@@ -8,15 +8,15 @@
 %%%-------------------------------------------------------------------
 %% session
 %% -record(session, {pid::pid(),
-%% 		  user::[byte() | bitstring()],
-%% 		  token::non_neg_integer()
-%% 		 }).
+%%		  user::[byte() | bitstring()],
+%%		  token::non_neg_integer()
+%%		 }).
 %% ets session
 -define(ETS_SERV_SESSION_NAME, serv_pb_session).
 -define(ETS_SERV_SESSION_HEIR, {heir, self(), undefined}).
 -define(ETS_SERV_SESSION_OPTS, [public,
 				named_table,
-				set,
+				duplicate_bag,
 				?ETS_SERV_SESSION_HEIR,
 				{write_concurrency, true},
 				{read_concurrency, true}
