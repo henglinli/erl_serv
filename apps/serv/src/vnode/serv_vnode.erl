@@ -18,23 +18,26 @@
 	 handle_exit/3]).
 
 -ignore_xref([
-	     start_vnode/1
+	      start_vnode/1
 	     ]).
 
 -record(state, {partition}).
 
 %% API
 start_vnode(I) ->
-    %% lager:info("start_vnode(~p)", [I]),
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
 
 init([Partition]) ->
-    {ok, #state { partition=Partition }}.
+    WorkerPoolSize = app_helper:get_env(serv, worker_pool_size, 10),
+    WorkerPool = {pool, serv_worker, WorkerPoolSize, []},
+    {ok, #state{partition=Partition}, [WorkerPool]}.
 
 %% Sample command: respond to a ping
-handle_command(ping, Sender, State) ->
-    lager:info("ping from: ~p", [Sender]),
-    {noreply, State};
+handle_command(ping, _Sender, State) ->
+    {reply, pong, State};
+
+handle_command({async, ping}, Sender, State) ->
+    {async, ping, Sender, State};
 
 handle_command(_Message, _Sender, State) ->
     {noreply, State}.

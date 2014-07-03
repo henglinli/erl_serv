@@ -11,10 +11,5 @@
 -define(N, 3).
 -define(R, 1).
 -define(W, 3).
-%% riak_core_vnode_master
--define(SERV_VMASTER, serv_vnode_master).
--define(STAT_VMASTER, serv_vnode_stat_master).
--define(ENTRY_VMASTER, serv_vnode_entry_master).
-%% riakk_core service
--define(STAT_SERVICE, serv_service_stat).
--define(ENTRY_SERVICE, serv_service_entry).
+%% riak_core_vnode
+-define(SERV, serv_vnode_master).

@@ -30,11 +30,6 @@ init([]) ->
     Shutdown = 2000,
     _Type = supervisor,
 
-    %% ServSessionMapSpec = {serv_session_map,
-    %%			  {serv_session_map, start_link, []},
-    %%			  Restart, Shutdown, worker,
-    %%			  [serv_session_map]},
-
     %% ServChatSpec = {serv_chat,
     %%		    {serv_chat, start_link, []},
     %%		    Restart, Shutdown, worker,
@@ -48,17 +43,9 @@ init([]) ->
     %%				    serv_session,
     %%				    []),
 
-    ServVMasterSpec = {?SERV_VMASTER,
-    		   {riak_core_vnode_master, start_link, [serv_vnode]},
-    		   Restart, Shutdown, worker, [riak_core_vnode_master]},
-
-    %% Entry = {?ENTRY_VMASTER,
-    %% 	     {riak_core_vnode_master, start_link, [serv_vnode_entry]},
-    %% 	     Restart, Shutdown, worker, [riak_core_vnode_master]},
-
-    %% Stat = {?STAT_VMASTER,
-    %% 	    {riak_core_vnode_master, start_link, [serv_vnode_stat]},
-    %% 	    Restart, Shutdown, worker, [riak_core_vnode_master]},
+    ServSpec = {?SERV,
+		{riak_core_vnode_master, start_link, [serv_vnode]},
+		Restart, Shutdown, worker, [riak_core_vnode_master]},
 
     FsmPut = {serv_fsm_put_sup,
 	      {serv_fsm_put_sup, start_link, []},
@@ -68,13 +55,9 @@ init([]) ->
 	      {serv_fsm_get_sup, start_link, []},
 	      Restart, infinity, supervisor, [serv_fsm_get_sup]},
 
-    {ok, {SupFlags, [%ServSessionMapSpec,
-		     %ServChatSpec,
-		     %RanchSupSpec,
+    {ok, {SupFlags, [%RanchSupSpec,
 		     %ListenerSpec,
-		     ServVMasterSpec,
-		     %% Entry,
-		     %% Stat,
+		     ServSpec,
 		     FsmPut,
 		     FsmGet
 		    ]}}.

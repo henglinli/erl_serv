@@ -26,7 +26,11 @@ init_worker(VNodeIndex, _Args, _Props) ->
     {ok, #state{index=VNodeIndex}}.
 
 %% @doc
-handle_work(nil, _Sender, State) ->
+handle_work(ping, _Sender, State) ->
+    {reply, pong, State};
+
+handle_work(Work, Sender, State) ->
+    lager:info("work: ~p from ~p", [Work, Sender]),
     {noreply, State}.
 
 %%%===================================================================
