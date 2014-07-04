@@ -27,16 +27,7 @@ init_worker(VNodeIndex, _Args, _Props) ->
 
 %% @doc
 handle_work(ping, _Sender, State) ->
-    lager:info("vnode index: ~p", [State#state.index]),
     {reply, pong, State};
-
-handle_work({message, Message}, _Sender, State) ->
-    case Message of
-	<<>> ->
-	    {reply, forword, State};
-	_Else ->
-	    {reply, save, State}
-    end;
 
 handle_work(Work, Sender, State) ->
     lager:info("work: ~p from ~p", [Work, Sender]),
