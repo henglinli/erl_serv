@@ -34,10 +34,11 @@ init([Partition]) ->
 
 %% Sample command: respond to a ping
 handle_command(ping, _Sender, State) ->
+    lager:info("partition: ~p", [State#state.partition]),
     {reply, pong, State};
 
-handle_command({async, ping}, Sender, State) ->
-    {async, ping, Sender, State};
+handle_command({async, Work}, Sender, State) ->
+    {async, Work, Sender, State};
 
 handle_command(_Message, _Sender, State) ->
     {noreply, State}.
