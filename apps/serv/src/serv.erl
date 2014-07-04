@@ -4,8 +4,10 @@
 -include_lib("riak_core/include/riak_core_vnode.hrl").
 
 -export([ping/0,
-	 async_ping/0,
-	 get_apl/2
+	 get_apl/3,
+	 get_apl_user/2,
+	 sync_send/3,
+	 send_one/0
 	]).
 -define(TIMEOUT, 5000).
 
@@ -14,27 +16,40 @@
 %%%===================================================================
 
 % @doc Pings a random vnode to make sure communication is functional
--spec ping(ping | {async, ping}) -> pong | pang | term().
-ping(How) ->
-    DocIdx = riak_core_util:chash_key({<<"Ping">>,
+-spec ping() -> pong | pang | term().
+ping() ->
+    DocIdx = riak_core_util:chash_key({?PING,
 				       erlang:term_to_binary(os:timestamp())}),
     case riak_core_apl:get_apl(DocIdx, 1, ?SERV) of
 	[] ->
 	    pang;
 	PrefList ->
 	    [IndexNode| _Rest] = PrefList,
-	    riak_core_vnode_master:sync_command(IndexNode, How, ?SERV)
+	    riak_core_vnode_master:sync_command(IndexNode, ping, ?SERV)
     end.
 
--spec ping() -> pong | pang | term().
-ping() ->
-    ping(ping).
-
--spec async_ping() -> pong | pang | term().
-async_ping() ->
-    ping({async, ping}).
-
--spec get_apl(binary(), integer()) -> node().
-get_apl(User, N) when erlang:is_binary(User) ->
-    DocIdx = riak_core_util:chash_key({<<"User">>, User}),
+-spec get_apl(binary(), binary(), integer()) -> node().
+get_apl(Bucket, Key, N)
+  when erlang:is_binary(Bucket) andalso erlang:is_binary(Key) ->
+    DocIdx = riak_core_util:chash_key({Bucket, Key}),
     riak_core_apl:get_apl(DocIdx, N, ?SERV).
+
+get_apl_user(Name, N)
+  when erlang:is_binary(Name) ->
+    get_apl(?USER, Name, N).
+
+-spec sync_send(ToWho :: binary(), Message :: binary(), N :: integer()) ->
+			  forword | save | {error, Reason :: term()}.
+sync_send(ToWho, Message, N)
+  when erlang:is_binary(ToWho) andalso erlang:is_binary(Message) ->
+    case serv_fsm_sup:checkout() of
+	full ->
+	    {error, busy};
+	Pid ->
+	    Result = serv_fsm:sync_send(Pid, ToWho, Message, N),
+	    ok = serv_fsm_sup:checkin(Pid),
+	    Result
+    end.
+
+send_one() ->
+    sync_send(<<"lee">>, <<"hello">>, 1).

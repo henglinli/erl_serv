@@ -13,3 +13,11 @@
 -define(W, 3).
 %% riak_core_vnode
 -define(SERV, serv_vnode_master).
+
+%% bucket
+% message
+-define(MESSAGE, <<"Message">>).
+% user
+-define(USER, <<"User">>).
+% ping
+-define(PING, <<"Ping">>).

@@ -47,17 +47,10 @@ init([]) ->
 		{riak_core_vnode_master, start_link, [serv_vnode]},
 		Restart, Shutdown, worker, [riak_core_vnode_master]},
 
-    FsmPut = {serv_fsm_put_sup,
-	      {serv_fsm_put_sup, start_link, []},
-	      Restart, infinity, supervisor, [serv_fsm_put_sup]},
-
-    FsmGet = {serv_fsm_get_sup,
-	      {serv_fsm_get_sup, start_link, []},
-	      Restart, infinity, supervisor, [serv_fsm_get_sup]},
+    ServFsmPoolSpec = serv_fsm_pool:pool_spec(),
 
     {ok, {SupFlags, [%RanchSupSpec,
 		     %ListenerSpec,
 		     ServSpec,
-		     FsmPut,
-		     FsmGet
+		     ServFsmPoolSpec
 		    ]}}.

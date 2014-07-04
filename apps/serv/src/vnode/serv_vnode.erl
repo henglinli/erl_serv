@@ -27,24 +27,37 @@
 start_vnode(I) ->
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
 
+-ifdef(USE_POOL).
 init([Partition]) ->
     WorkerPoolSize = app_helper:get_env(serv, worker_pool_size, 10),
     WorkerPool = {pool, serv_worker, WorkerPoolSize, []},
-    {ok, #state{partition=Partition}, [WorkerPool]}.
-
+    {ok, #state{partition = Partition}, [WorkerPool]}.
+-else.
+init([Partition]) ->
+    {ok, #state{partition = Partition}}.
+-endif.
+%% proxy of forward message
+-ifdef(USE_POOL).
+forward(Message, Sender, State) ->
+    {async, {forward, Message}, Sender, State}.
+-else.
+forward(Message, _Sender, State) ->
+    lager:info("forward mesasge: ~p", [Message]),
+    {reply, forward, State}.
+-endif.
+%% forward message
+handle_command({forward, Message}, Sender, State) ->
+    forward(Message, Sender, State);
 %% Sample command: respond to a ping
 handle_command(ping, _Sender, State) ->
-    lager:info("partition: ~p", [State#state.partition]),
     {reply, pong, State};
 
-handle_command({async, Work}, Sender, State) ->
-    {async, Work, Sender, State};
-
-handle_command(_Message, _Sender, State) ->
-    {noreply, State}.
+handle_command(Message, _Sender, State) ->
+    lager:notice("Unknown message: ~P", [Message]),
+    {reply, not_impl, State}.
 
 handle_handoff_command(Message, Sender, State) ->
-    lager:info("handle_handoff_command(~p, ~p, State)", [Message, Sender]),
+    lager:notice("handle_handoff_command(~p, ~p, State)", [Message, Sender]),
     {noreply, State}.
 
 handoff_starting(_TargetNode, State) ->

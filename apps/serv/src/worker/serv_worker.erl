@@ -29,17 +29,14 @@ init_worker(VNodeIndex, _Args, _Props) ->
 handle_work(ping, _Sender, State) ->
     lager:info("vnode index: ~p", [State#state.index]),
     {reply, pong, State};
+%% forward message
+handle_work({forward, Message}, _Sender, State) ->
+    lager:info("forward mesasge: ~p", [Message]),
+    {reply, forword, State};
 
-handle_work({message, Message}, _Sender, State) ->
-    case Message of
-	<<>> ->
-	    {reply, forword, State};
-	_Else ->
-	    {reply, save, State}
-    end;
-
+%% unknown
 handle_work(Work, Sender, State) ->
-    lager:info("work: ~p from ~p", [Work, Sender]),
+    lager:notice("unknonw work: ~p from ~p", [Work, Sender]),
     {noreply, State}.
 
 %%%===================================================================
