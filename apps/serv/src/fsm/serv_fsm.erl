@@ -105,12 +105,20 @@ wait_msg(Event, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-%% todo: impl as tail recursive
-forward([], _Message, State) ->
-    {reply, not_found, wait_msg, State};
-forward(PrefList, Message, State) ->
-    %% send messge to one index node
-    [IndexNode| Rest] = PrefList,
+forward_helper(IndexNode, [], Message, State) ->
+    try
+	case riak_core_vnode_master:sync_command(IndexNode, {forward, Message}, ?TIMEOUT) of
+	    forward -> % message was forward
+		{reply, forward, wait_msg, State};
+	    not_found -> % not found target
+		{reply, not_found, wait_msg, State}
+	end
+    catch
+	{_Reason, _Where} ->
+	    {reply, {error, sync_command_error}, wait_msg, State}
+    end;
+%%
+forward_helper(IndexNode, Rest, Message, State) ->
     try
 	case riak_core_vnode_master:sync_command(IndexNode, {forward, Message}, ?TIMEOUT) of
 	    forward -> % message was forward
@@ -122,7 +130,12 @@ forward(PrefList, Message, State) ->
 	{_Reason, _Where} ->
 	    {reply, {error, sync_command_error}, wait_msg, State}
     end.
-%%
+
+forward(PrefList, Message, State) ->
+    %% send messge to one index node
+    [IndexNode| Rest] = PrefList,
+    forward_helper(IndexNode, Rest, Message, State).
+    %%
 wait_msg({forward, ToWho, Message, N}, _From, State) ->
     case get_apl(?MESSAGE, ToWho, N) of
 	[] ->
