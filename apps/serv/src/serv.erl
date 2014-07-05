@@ -9,7 +9,6 @@
 	 sync_send/3,
 	 send_one/0
 	]).
--define(TIMEOUT, 5000).
 
 %%%===================================================================
 %%% API
@@ -25,7 +24,7 @@ ping() ->
 	    pang;
 	PrefList ->
 	    [IndexNode| _Rest] = PrefList,
-	    riak_core_vnode_master:sync_command(IndexNode, ping, ?SERV)
+	    riak_core_vnode_master:sync_command(IndexNode, ping, ?SERV, ?TIMEOUT)
     end.
 
 -spec get_apl(binary(), binary(), integer()) -> node().
@@ -42,12 +41,12 @@ get_apl_user(Name, N)
 			  forword | save | {error, Reason :: term()}.
 sync_send(ToWho, Message, N)
   when erlang:is_binary(ToWho) andalso erlang:is_binary(Message) ->
-    case serv_fsm_sup:checkout() of
+    case serv_fsm_pool:checkout() of
 	full ->
 	    {error, busy};
 	Pid ->
 	    Result = serv_fsm:sync_send(Pid, ToWho, Message, N),
-	    ok = serv_fsm_sup:checkin(Pid),
+	    ok = serv_fsm_pool:checkin(Pid),
 	    Result
     end.
 

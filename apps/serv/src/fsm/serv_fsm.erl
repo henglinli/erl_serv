@@ -12,16 +12,16 @@
 
 -behaviour(gen_fsm).
 
--define(TIMEOUT, 5000).
+-behaviour(poolboy_worker).
+
 %% API
 -export([start_link/1]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
 	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
--export([wait_msg/2, wait_msg/3,
-	 wait_msg_save/2, wait_msg_save/3
-	]).
+-export([wait_msg/2, wait_msg/3
+		]).
 -export([sync_send/4]).
 -define(SERVER, ?MODULE).
 
@@ -32,8 +32,10 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
--spec sync_send(Pid:: pid(), ToWho :: binary(), Message :: binary(), N :: integer()) ->
-		       forward | not_found.
+-spec sync_send(Pid:: pid(), 
+		ToWho :: binary(), 
+		Message :: binary(), 
+		N :: integer()) -> forward | not_found.
 sync_send(Pid, ToWho, Message, N) ->
     gen_fsm:sync_send_event(Pid, {forward, ToWho, Message, N}).
 %%--------------------------------------------------------------------
@@ -105,23 +107,28 @@ wait_msg(Event, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-%% todo: impl as tail recursive
+% do_forward
+do_forward(IndexNode, Rest, Message, State) ->
+    try
+ 	case riak_core_vnode_master:sync_command(IndexNode, {forward, Message},
+ 						 ?SERV, ?TIMEOUT) of
+ 	    forward -> % message was forward
+ 		{reply, forward, wait_msg, State};
+ 	    not_found -> % not found target
+ 		forward(Rest, Message, State)
+ 	end
+    catch
+ 	{_Reason, _Where} ->
+ 	    {reply, {error, sync_command_error}, wait_msg, State}
+    end.
+% forward	 
 forward([], _Message, State) ->
     {reply, not_found, wait_msg, State};
+% forward
 forward(PrefList, Message, State) ->
     %% send messge to one index node
     [IndexNode| Rest] = PrefList,
-    try
-	case riak_core_vnode_master:sync_command(IndexNode, {forward, Message}, ?TIMEOUT) of
-	    forward -> % message was forward
-		{reply, forward, wait_msg, State};
-	    not_found -> % not found target
-		forward(Rest, Message, State)
-	end
-    catch
-	{_Reason, _Where} ->
-	    {reply, {error, sync_command_error}, wait_msg, State}
-    end.
+    do_forward(IndexNode, Rest, Message, State).
 %%
 wait_msg({forward, ToWho, Message, N}, _From, State) ->
     case get_apl(?MESSAGE, ToWho, N) of
@@ -140,16 +147,7 @@ wait_msg(Event, From, State) ->
     Reply = not_impl,
     {reply, Reply, wait_msg, State}.
 
-wait_msg_save(Event, State) ->
-    lager:notice("unknown event: ~p", [Event]),
-    Reply = not_impl,
-    {reply, Reply, wait_msg_forward, State}.
-
-wait_msg_save(Event, From, State) ->
-    lager:notice("unknown event: ~p from: ~p", [Event, From]),
-    Reply = not_impl,
-    {reply, Reply, wait_msg_save, State}.
-%%--------------------------------------------------------------------
+%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Whenever a gen_fsm receives an event sent using

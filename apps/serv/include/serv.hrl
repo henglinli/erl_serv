@@ -21,3 +21,5 @@
 -define(USER, <<"User">>).
 % ping
 -define(PING, <<"Ping">>).
+% timeout
+-define(TIMEOUT, 5000).

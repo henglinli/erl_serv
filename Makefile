@@ -11,6 +11,7 @@ deps:
 
 clean:
 	$(REBAR) clean
+	@rm -rf apps/*/ebin/*
 
 distclean: clean devclean relclean
 	$(REBAR) delete-deps
