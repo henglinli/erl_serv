@@ -9,6 +9,8 @@
 -module(serv_fsm_pool).
 %% API
 
+-define(POOL_NAME, ?MODULE).
+
 -export([checkout/0, checkin/1]).
 -export([pool_spec/0]).
 
@@ -18,15 +20,15 @@
 %% get a worker
 -spec checkout() -> pid() | full.
 checkout() ->
-    poolboy:checkout(serv_fsm_pool, true).
+    poolboy:checkout(?POOL_NAME, true).
 %% put back a worker
 -spec checkin(pid()) -> ok.
 checkin(Worker) ->
-    poolboy:checkin(serv_fsm_pool, Worker).
+    poolboy:checkin(?POOL_NAME, Worker).
 %%
 -spec pool_spec() -> supervisor:child_spec().
 pool_spec() ->
-    PoolName = serv_fsm_pool,
+    PoolName = ?POOL_NAME,
     PoolArgs = [{name, {local, PoolName}},
 		{worker_module, serv_fsm},
 		{size, 8},

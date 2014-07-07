@@ -28,7 +28,6 @@ init([]) ->
 
     Restart = permanent,
     Shutdown = 2000,
-    _Type = supervisor,
 
     %% ServChatSpec = {serv_chat,
     %%		    {serv_chat, start_link, []},
@@ -43,14 +42,18 @@ init([]) ->
     %%				    serv_session,
     %%				    []),
 
-    ServSpec = {?SERV,
-		{riak_core_vnode_master, start_link, [serv_vnode]},
-		Restart, Shutdown, worker, [riak_core_vnode_master]},
+    ServVnodeSpec = {?SERV,
+		     {riak_core_vnode_master, start_link, [serv_vnode]},
+		     Restart, Shutdown, worker, [riak_core_vnode_master]},
+    %% ServFsmPoolSpec = serv_fsm_pool:pool_spec(),
 
-    ServFsmPoolSpec = serv_fsm_pool:pool_spec(),
-
+    ServFsmSupSpec = {serv_fsm_sup,
+		      {serv_fsm_sup, start_link, []},
+		      Restart, Shutdown, supervisor, [serv_fsm_sup]},
+    
     {ok, {SupFlags, [%RanchSupSpec,
 		     %ListenerSpec,
-		     ServSpec,
-		     ServFsmPoolSpec
+		     ServVnodeSpec,
+		     %ServFsmPoolSpec
+		     ServFsmSupSpec
 		    ]}}.
