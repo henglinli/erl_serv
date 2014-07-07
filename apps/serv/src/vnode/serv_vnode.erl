@@ -30,7 +30,7 @@ start_vnode(I) ->
 -ifdef(USE_POOL).
 init([Partition]) ->
     WorkerPoolSize = app_helper:get_env(serv, worker_pool_size, 10),
-    WorkerPool = {pool, serv_worker, WorkerPoolSize, []},
+    WorkerPool = {pool, serv_work, WorkerPoolSize, []},
     {ok, #state{partition = Partition}, [WorkerPool]}.
 -else.
 init([Partition]) ->
@@ -48,6 +48,7 @@ forward(Message, _Sender, State) ->
 %% forward message
 handle_command({forward, Message}, Sender, State) ->
     forward(Message, Sender, State);
+
 %% Sample command: respond to a ping
 handle_command(ping, _Sender, State) ->
     {reply, pong, State};
