@@ -58,7 +58,7 @@ start_link() ->
       MaxT :: pos_integer(),
       ChildSpec :: supervisor:child_spec().
 init([]) ->
-    RestartStrategy = one_for_one,
+    RestartStrategy = one_for_all,
     MaxRestarts = 10,
     MaxSecondsBetweenRestarts = 10,
 
@@ -68,17 +68,43 @@ init([]) ->
     Shutdown = 2000,
     Type = worker,
     %% serv_worker_sup
-    ServWorkerSupSpec = {serv_worker_sup,
-			 {serv_worker_sup, start_link, []},
-			 Restart, Shutdown, supervisor, [serv_worker_sup]},
+    %% ServWorkerSupSpec = {serv_worker_sup,
+    %%			 {serv_worker_sup, start_link, []},
+    %%			 Restart, Shutdown, supervisor, [serv_worker_sup]},
 
     %% serv_worker_pool
     ServWorkerPooolSpec = {serv_worker_pool,
 			   {serv_worker_pool, start_link, []},
 			   Restart, Shutdown, Type, [serv_worker_pool]},
 
-    {ok, {SupFlags, [ServWorkerSupSpec, ServWorkerPooolSpec]}}.
+    Args = [{worker_callback_mod, serv_send_worker},
+	    {worker_args, []}],
+
+    ServWorkerSpecs = serv_worker_spec(8, Args, []),
+
+    {ok, {SupFlags, [ServWorkerPooolSpec] ++ ServWorkerSpecs}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+serv_worker_name(N) ->
+    NBinary = erlang:integer_to_binary(N),
+    Name = <<"serv_worker_", NBinary/binary>>,
+    erlang:binary_to_atom(Name, utf8).
+
+serv_worker_spec(0, _Args, Specs) ->
+    Specs;
+
+serv_worker_spec(N, Args, []) ->
+    Name = serv_worker_name(N),
+    Spec = {Name,
+	    {serv_worker, start_link, [Name, Args, last]},
+	    permanent, 2000, worker, [serv_worker]},
+    serv_worker_spec(N - 1, Args, [Spec]);
+
+serv_worker_spec(N, Args, Specs) ->
+    Name = serv_worker_name(N),
+    Spec = {Name,
+	    {serv_worker, start_link, [Name, Args]},
+	    permanent, 2000, worker, [serv_worker]},
+    serv_worker_spec(N - 1, Args, [Spec] ++ Specs).

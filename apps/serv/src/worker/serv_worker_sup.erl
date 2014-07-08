@@ -37,7 +37,7 @@ start_link() ->
 -spec start_worker(WorkerArgs :: proplists:proplist())
 		  -> supervisor:startchild_ret().
 start_worker(WorkerArgs) ->
-    supervisor:start_child(?SERVER, WorkerArgs).
+    supervisor:start_child(?SERVER, [WorkerArgs]).
 %%%===================================================================
 %%% Supervisor callbacks
 %%%===================================================================

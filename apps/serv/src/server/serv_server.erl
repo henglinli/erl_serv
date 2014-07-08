@@ -15,7 +15,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+         terminate/2, code_change/3]).
 
 -export([get/0]).
 
@@ -75,36 +75,36 @@ init([]) ->
 handle_call(get, _From, State = #state{last = Last, size = Size}) ->
     {ok, Ring}=riak_core_ring_manager:get_my_ring(),
     Status = riak_core_ring:all_member_status(Ring),
-    ValidNodes = list:map(fun(Member) ->
-				  case Member of
-				      {Node, valid} ->
-					  Node;
-				      _NotValid ->
-					  []
-				  end
-			  end,
-			  Status),
+    ValidNodes = lists:map(fun(Member) ->
+                                  case Member of
+                                      {Node, valid} ->
+                                          Node;
+                                      _NotValid ->
+                                          []
+                                  end
+                          end,
+                          Status),
     case erlang:length(ValidNodes) of
-	0 ->
-	    {reply, serv_donw, State};
-	NewSize ->
-	    case NewSize of
-		Size ->
-		    case Last of
-			0 -> % no last use head
-			    [First | _Rest] = ValidNodes,
-			    {reply, First, State#state{last = 1}};
-			Size -> % last is tail, use head
-			    [First | _Rest] = ValidNodes,
-			    {reply, First, State#state{last = 1}};
-			_Else -> % last is not tail, use next
-			    Node = list:nth(Last + 1, ValidNodes),
-			    {reply, Node, State#state{last = Last + 1}}
-		    end;
-		_Else -> % valid nodes changes then use head
-		    [First | _Rest] = ValidNodes,
-		    {reply, First, State#state{last = 1, size = NewSize}}
-	    end
+        0 ->
+            {reply, serv_donw, State};
+        NewSize ->
+            case NewSize of
+                Size ->
+                    case Last of
+                        0 -> % no last use head
+                            [First | _Rest] = ValidNodes,
+                            {reply, First, State#state{last = 1}};
+                        Size -> % last is tail, use head
+                            [First | _Rest] = ValidNodes,
+                            {reply, First, State#state{last = 1}};
+                        _Else -> % last is not tail, use next
+                            Node = lists:nth(Last + 1, ValidNodes),
+                            {reply, Node, State#state{last = Last + 1}}
+                    end;
+                _Else -> % valid nodes changes then use head
+                    [First | _Rest] = ValidNodes,
+                    {reply, First, State#state{last = 1, size = NewSize}}
+            end
     end;
 
 handle_call(_Request, _From, State) ->
@@ -170,11 +170,11 @@ node_to_host(Node)
   when erlang:is_atom(Node) ->
     NodeString = erlang:atom_to_list(Node),
     lists:dropwhile(fun(Char) ->
-			    case Char of
-				'@' ->
-				    true;
-				_Else ->
-				    fasle
-			    end
-		    end,
-		    NodeString).
+                            case Char of
+                                '@' ->
+                                    true;
+                                _Else ->
+                                    fasle
+                            end
+                    end,
+                    NodeString).
