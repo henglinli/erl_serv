@@ -45,13 +45,14 @@ handle_work({forward, ToWho, Message, N}, _WorkFrom, WorkState) ->
 
 handle_work(Work, WorkFrom, WorkState) ->
     lager:debug("work ~p from ~p", [Work, WorkFrom]),
-    {reply, Work, WorkState}.
+    {reply, {?MODULE, {unkown_work, Work}}, WorkState}.
 %% reply
 -spec reply(WorkFrom :: term(), Reply :: term()) ->
     ok | {error, Reason :: term()}.
 
 reply(WorkFrom, {?MODULE, Info}) ->
-    WorkFrom ! Info;
+    WorkFrom ! Info,
+    ok;
 
 reply(_WorkFrom, _Reply) ->
     {error, not_impl}.
