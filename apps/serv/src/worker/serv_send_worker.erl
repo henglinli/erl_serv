@@ -9,6 +9,7 @@
 -module(serv_send_worker).
 
 -include("serv.hrl").
+-include("serv_pb_chat_pb.hrl").
 
 -behaviour(serv_worker).
 
@@ -34,13 +35,14 @@ init_worker([]) ->
     {reply, Reply :: term(), NewWorkState :: term()} |
     {noreply, NewWorkState :: term()}.
 
-handle_work({forward, ToWho, Message, N}, _WorkFrom, WorkState) ->
+handle_work({forward, ToWho, {Id, Message}, N}, _WorkFrom, WorkState) ->
     case get_apl(?MESSAGE, ToWho, N) of
 	[] ->
-	    {reply, {error, serv_down}, WorkState};
+	    Reply = encode_reply(Id, 1, <<"serv donw">>),
+	    {reply, {?MODULE, Reply}, WorkState};
 	PrefList ->
-	    Result = forward(PrefList, Message),
-	    {reply, {?MODULE, Result}, WorkState}
+	    Reply = forward_reply(PrefList, Id, Message),
+	    {reply, {?MODULE, Reply}, WorkState}
     end;
 
 handle_work(Work, WorkFrom, WorkState) ->
@@ -50,9 +52,9 @@ handle_work(Work, WorkFrom, WorkState) ->
 -spec reply(WorkFrom :: term(), Reply :: term()) ->
     ok | {error, Reason :: term()}.
 
+%% message will reply to serv_pb_server
 reply(WorkFrom, {?MODULE, Info}) ->
-    WorkFrom ! Info,
-    ok;
+    serv_pb_server:sync_send({pid, WorkFrom}, Info);
 
 reply(_WorkFrom, _Reply) ->
     {error, not_impl}.
@@ -86,6 +88,7 @@ do_forward(IndexNode, RestPrefList, Message) ->
 	    error
     end.
 % forward
+-spec forward(term(), term()) -> forward | error | not_found.
 forward([], _Message) ->
     not_found;
 % forward
@@ -93,3 +96,21 @@ forward(PrefList, Message) ->
     %% send messge to one index node
     [IndexNode| RestPrefList] = PrefList,
     do_forward(IndexNode, RestPrefList, Message).
+
+% forward_reply
+forward_reply(PrefList, Id, Message) ->
+    case forward(PrefList, Message) of
+	error ->
+	    encode_reply(Id, 2, <<"serv internal error">>);
+	forward ->
+	    encode_reply(Id, 0, <<"message was forwarded">>);
+	not_found ->
+	    encode_reply(Id, 3, <<"message was not handle">>)
+    end.
+
+-spec encode_reply(integer(), integer(), binary()) -> iolist().
+encode_reply(Id, ErrCode, ErrMsg) ->
+    Reply = serv_pb_chat_pb:encode(#reply{id=Id,
+					  errcode=ErrCode,
+					  errmsg=ErrMsg}),
+    [8, Reply].

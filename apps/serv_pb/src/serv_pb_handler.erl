@@ -33,12 +33,10 @@
 -record(state, {ets_tab = undefined :: undefined | ets:tab()}).
 
 %% handle message
--callback handle(Request :: term(), States :: orddict:orddict()) ->
+-callback handle(Request :: term(), State :: term()) ->
     {error, Reason :: term()} |
-    {noreply, nochange} |
-    {noreply, NewStates :: orddict:orddict()} |
-    {Response :: binary(), nochange} |
-    {Response :: binary(), NewStates :: orddict:orddict()}.
+    {reply, Reply :: term(), NewState ::term()} |
+    {noreply, NewState :: term()}.
 
 %%%===================================================================
 %%% API

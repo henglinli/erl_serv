@@ -3,10 +3,10 @@
 // common error response - may be generated for any Req
 // fix registered as 0
 message response {
-  // error message
-  required bytes errmsg = 1;
   // error message code
-  required uint32 errcode = 2;
+  required uint32 errcode = 1;
+  // error message
+  required bytes errmsg = 2;
 }
 
 // ping

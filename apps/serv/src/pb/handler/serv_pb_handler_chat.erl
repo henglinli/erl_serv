@@ -12,56 +12,59 @@
 -include("serv_pb_chat_pb.hrl").
 %% API
 -export([handle/2]).
--spec handle(Chat :: binary(), Session :: term()) ->
-		    {noreply | term(), nochange | term()}.
-handle(Chat, Session) ->
+
+-record(state, {last_id :: integer}).
+%% handle
+-spec handle(Request :: term(), State :: term()) ->
+		    {error, Reason :: term()} |
+    {reply, Reply :: term(), NewState ::term()} |
+    {noreply, NewState :: term()}.
+
+handle(Chat, undefined) ->
     Ok = #response{errcode = 0, errmsg = <<"OK">>},
     EncodedOk = serv_pb_base_pb:encode(Ok),
-    Self = Session#session.user,
     case serv_pb_chat_pb:decode(chat, Chat) of
 	#chat{from = Self, to = To} ->
 	    lager:info("chat to ~p", [To]),
 	    case To of
 		Self ->
-		    {[0, EncodedOk], nochange};
+		    {reply, [0, EncodedOk], undefined};
 		_To ->
-		    case erlang:get(To) of
-			undefined ->
-			    case serv_pb_session:lookup(To) of
-				undefined ->
-				    case riak_core_metadata:get({<<"session">>, <<"user">>}, To) of
-					undefined ->
-					    lager:info("save ~p's message",[To]),
-					    {[0, EncodedOk], nochange};
-					{pid, ToPid} ->
-					    lager:info("cluster get {~p, {pid, ~p}}", [To, ToPid]),
-					    _Ignore = erlang:put(To, {pid, ToPid}),
-					    _Ignore = erlang:put(ToPid, {user, To}),
-					    %% send message to ToPid
-					    serv_pb_server:sync_send(ToPid, [6, Chat]),
-					    {[0, EncodedOk], nochange}
-				    end;
-				{pid, ToPid} ->
-				    lager:info("sesssion get {~p, {pid, ~p}}", [To, ToPid]),
-				    _Ignore = erlang:put(To, {pid, ToPid}),
-				    _Ignore = erlang:put(ToPid, {user, To}),
-				    %% send message to ToPid
-				    serv_pb_server:sync_send(ToPid, [6, Chat]),
-				    {[0, EncodedOk], nochange}
-			    end;
-			{pid, ToPid} ->
-			    lager:info("dic get {~p, {pid, ~p}}", [To, ToPid]),
-			    _Ignore = erlang:put(To, {pid, ToPid}),
-			    _Ignore = erlang:put(ToPid, {user, To}),
-			    %% send message to ToPid
-			    serv_pb_server:sync_send(ToPid, [6, Chat]),
-			    {[0, EncodedOk], nochange}
-		    end
+		    %% send [mesasge] to server
+		    ok = serv:send(erlang:self(), To, {1, Chat}, 3),
+		    EncodedChatId = encode_chat_id(1),
+		    %% reply [message id] to client
+		    %% after [message] was sent, reply message was sent
+		    {reply, [6, EncodedChatId], #state{last_id=1}}
 	    end;
 	_Other ->
 	    Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},
 	    EncodedError = serv_pb_base_pb:encode(Error),
-	    {[0, EncodedError], nochange}
+	    {reply, [0, EncodedError], undefined}
+    end;
+
+handle(Chat, #state{last_id = LastId} = State) ->
+    Ok = #response{errcode = 0, errmsg = <<"OK">>},
+    EncodedOk = serv_pb_base_pb:encode(Ok),
+    case serv_pb_chat_pb:decode(chat, Chat) of
+	#chat{from = Self, to = To} ->
+	    lager:info("chat to ~p", [To]),
+	    case To of
+		Self ->
+		    {reply, [0, EncodedOk], State};
+		_To ->
+		    %% send [mesasge] to server
+		    Id = LastId + 1,
+		    ok = serv:send(erlang:self(), To, {Id, Chat}, 3),
+		    EncodedChatId = encode_chat_id(Id),
+		    %% reply [message id] to client
+		    %% after [message] was sent, reply message was sent
+		    {reply, [6, EncodedChatId], #state{last_id=Id}}
+	    end;
+	_Other ->
+	    Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},
+	    EncodedError = serv_pb_base_pb:encode(Error),
+	    {reply, [0, EncodedError], State}
     end.
 %%%===================================================================
 %%% API
@@ -76,3 +79,7 @@ handle(Chat, Session) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec encode_chat_id(Id :: integer()) -> EncodedChatId :: binary().
+encode_chat_id(Id) ->
+    IdRecord = #chat_id{id = Id},
+    serv_pb_chat_pb:encode(IdRecord).

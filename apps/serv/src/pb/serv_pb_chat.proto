@@ -1,13 +1,32 @@
 // HenryLee<henglinli@gmail.com>
-
-// session
-message session {
-    required bytes user = 1;
-}
+//
+// how chat was handle by Server and Client
+// Server               Client
+//            <--       [chat]
+// [chat_id]  -->
+//  (soon or some times later)
+// [reply]    -->
+// so, one request two response
+//
 // chat
 message chat {
   required bytes from = 1;
   required bytes to = 2;
   required uint32 time = 3;
   required bytes msg = 4;
+}
+// chat id
+// as soon as serv_pb_server recved [chat],
+// it reply [chat_id] to client
+message chat_id {
+  required uint32 id = 1;
+}
+// after chat was sent,
+// serv_pb_server reply [reply].
+message reply {
+  // chat id
+  required uint32 id = 1;
+  // chat reponse
+  required uint32 errcode = 2;
+  required bytes errmsg = 3;
 }

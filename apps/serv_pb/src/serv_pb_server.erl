@@ -78,9 +78,10 @@ set_socket(Pid, Socket) ->
     gen_fsm:sync_send_event(Pid, {set_socket, Socket}, infinity).
 
 %% @doc sync send to client
--spec sync_send(Who :: binary(), Message :: binary() | iolist()) ->
-		       [term()] | {error, Reason :: term()}.
-sync_send(Who, Message)
+-spec sync_send({pid, Pid :: pid()} | {name, Name :: binary()},
+		Message :: binary() | iolist()) ->
+		       ok | {error, Reason :: term()}.
+sync_send({name, Who}, Message)
   when erlang:is_binary(Who) ->
     case serv_pb_session:lookup(Who) of
 	undefined ->
@@ -90,7 +91,11 @@ sync_send(Who, Message)
 			      gen_fsm:sync_send_event(Pid, {message, Message})
 		      end,
 		      Sessions)
-    end.
+    end;
+
+sync_send({pid, Pid}, Message)
+    when erlang:is_pid(Pid) ->
+    gen_fsm:sync_send_event(Pid, {message, Message}).
 
 %% @doc send to client
 -spec send(Who :: binary(), Message :: binary() | iolist()) ->
@@ -220,7 +225,7 @@ reply(_Event, State) ->
 reply(_Event, _From, State) ->
     {reply, unknown_message, ready, State}.
 
-% reply then stop
+%% reply then stop
 reply_then_stop(timeout, State=#state{response=Response,
 				     socket = Socket,
 				     transport = {Transport, _Control}
@@ -301,8 +306,9 @@ handle_info({tcp, Socket, _Data}, handle_info, State) ->
 		" while another was in progress"),
     Response = encode(#response{errmsg = <<"last request not done">>,
 				errcode = 4}),
-    {next_state, reply_then_stop, State#state{socket = Socket,
-					      response = Response}};
+    {next_state, reply_then_stop,
+     State#state{socket = Socket,
+		 response = Response}, 0};
 
 handle_info({tcp, Socket, Packet}, wait_for_auth,
 	    State = #state{request=undefined,
@@ -338,13 +344,12 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
 			2 -> % login
 			    case serv_pb_session:register(User) of
 				true ->
-				    riak_core_metadata:put({<<"session">>, <<"user">>}, User, {pid, erlang:self()}),
 				    %% todo: check password and store
 				    {next_state, reply,
 				     State#state{response = Ok,
 						 session = User}, 0};
 				_Other ->
-				    lager:error("serv_pb_session:register/2 failed"),
+				    lager:error("serv_pb_session:register/2", []),
 				    {next_state, reply_then_stop,
 				     State#state{response = InternalErr}, 0}
 			    end;
@@ -390,45 +395,40 @@ handle_info({tcp, Socket, Packet}, _StateName,
 		    {next_state, reply, State#state{response = NotImpl}, 0};
 		Handler when is_atom(Handler) ->
 		    case Handler:handle(MsgData, HandlerStates) of
-			{noreply, nochange} ->
-			    {next_state, ready, State};
 			{noreply, NewHandlerStates} ->
 			    {next_state, ready,
 			     State#state{session = NewHandlerStates}};
-			{Response, nochange} ->
-			    {next_state, reply,
-			     State#state{response = Response}, 0};
-			{Response, NewHandlerStates} ->
+			{reply, Response, NewHandlerStates} ->
 			    {next_state, reply,
 			     State#state{response = Response,
 					 session = NewHandlerStates}, 0};
-			_ ->
+			{error, _Reason} ->
 			    {next_state, reply_then_stop,
 			     State#state{response = InternalErr}, 0}
 		    end
 	    end
     end;
 
-% other process message to reply
+%% other process message to reply
 handle_info({message, Message}, ready, State) ->
     {next_state, reply,
      State#state{response = Message}, 0};
-handle_info({'DOWN', MonitorRef, _Type, Object, _Info}, StateName,
-	    State = #state{}) ->
-    case erlang:get(Object) of
-	undefined ->
-	    continue;
-	{user, User} ->
-	    _Ignore = erlang:erase(User),
-	    _Ignore = erlang:erase(Object)
-    end,
-    _Result = erlang:demonitor(MonitorRef, [flush]),
-    {next_state, StateName, State};
+%% handle_info({'DOWN', MonitorRef, _Type, Object, _Info}, StateName,
+%%	    State = #state{}) ->
+%%     case erlang:get(Object) of
+%%	undefined ->
+%%	    continue;
+%%	{user, User} ->
+%%	    _Ignore = erlang:erase(User),
+%%	    _Ignore = erlang:erase(Object)
+%%     end,
+%%     _Result = erlang:demonitor(MonitorRef, [flush]),
+%%     {next_state, StateName, State};
 % unknown mesasge
 handle_info(Message, StateName, State) ->
     %% Throw out messages we don't care about, but log them
     lager:error("Unrecognized message ~p", [Message]),
-    {next_state, StateName, State, 0}.
+    {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -455,7 +455,7 @@ terminate(_Reason, _StateName,
 	undefined ->
 	    done;
 	_User ->
-	    serv_pb_session:unregister(User),
+	    _Result = serv_pb_session:unregister(User),
 	    done
     end.
 

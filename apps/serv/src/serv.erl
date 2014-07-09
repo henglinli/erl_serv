@@ -15,8 +15,7 @@
 -export([ping/0,
 	 get_apl/3,
 	 get_apl_user/2,
-	 sync_send/3,
-	 send_one/0
+	 send/4
 	]).
 
 %%%===================================================================
@@ -46,13 +45,17 @@ get_apl_user(Name, N)
   when erlang:is_binary(Name) ->
     get_apl(?USER, Name, N).
 
--spec sync_send(ToWho :: binary(), Message :: binary(), N :: integer()) ->
-			  forword | save | {error, Reason :: term()}.
-sync_send(ToWho, Message, N)
-  when erlang:is_binary(ToWho)
+-spec send(From :: pid(),
+	   ToWho :: binary(),
+	   {Id :: integer(), Message :: binary()},
+	   N :: integer()) ->
+		  forword | save | {error, Reason :: term()}.
+send(From, ToWho, {Id, Message} = Message, N)
+  when erlang:is_pid(From)
+       andalso erlang:is_binary(ToWho)
+       andalso erlang:is_integer(Id)
        andalso erlang:is_binary(Message)
        andalso erlang:is_integer(N) ->
-    ok.
-
-send_one() ->
-    sync_send(<<"lee">>, <<"hello">>, 1).
+    %% message {froward, Message} was send by serv_send_worker
+    %% and handle by serv_vnode_work
+    serv_worker_pool:handle_work({forward, ToWho, Message, N}, From).
