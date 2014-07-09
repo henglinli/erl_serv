@@ -10,11 +10,11 @@ deps:
 	$(REBAR) get-deps
 
 clean:
-	$(REBAR) clean
+	$(REBAR) -r clean
 	@rm -rf apps/*/ebin/*
 
 distclean: clean devclean relclean
-	$(REBAR) delete-deps
+#$(REBAR) delete-deps
 
 rel: all
 	$(REBAR) generate

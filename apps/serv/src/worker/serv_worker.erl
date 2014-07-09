@@ -25,12 +25,12 @@
 
 %% init worker
 -callback init_worker(WorkerArgs :: term()) ->
-    {ok, NewWorkerState :: term()} |
+    {ok, NewWorkState :: term()} |
     {error, Reason :: term()}.
 %% handle worker
--callback handle_work(Work :: term(), WorkFrom :: term(), WorkerState ::term()) ->
-    {reply, Reply :: term(), NewWorerkState :: term()} |
-    {noreply, NewWorkerState :: term()}.
+-callback handle_work(Work :: term(), WorkFrom :: term(), WorkState ::term()) ->
+    {reply, Reply :: term(), NewWorkState :: term()} |
+    {noreply, NewWorkState :: term()}.
 %% reply
 -callback reply(WorkFrom :: term(), Reply :: term()) ->
     ok | {error, Reason :: term()}.
