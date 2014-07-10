@@ -31,7 +31,7 @@ handle(Chat, undefined) ->
 		    {reply, [0, EncodedOk], undefined};
 		_To ->
 		    %% send [mesasge] to server
-		    ok = serv:send(erlang:self(), To, {1, Chat}, 3),
+		    ok = serv:send(erlang:self(), {1, To, Chat, 3}),
 		    EncodedChatId = encode_chat_id(1),
 		    %% reply [message id] to client
 		    %% after [message] was sent, reply message was sent
@@ -55,7 +55,7 @@ handle(Chat, #state{last_id = LastId} = State) ->
 		_To ->
 		    %% send [mesasge] to server
 		    Id = LastId + 1,
-		    ok = serv:send(erlang:self(), To, {Id, Chat}, 3),
+		    ok = serv:send(erlang:self(), {Id, To, Chat, 3}),
 		    EncodedChatId = encode_chat_id(Id),
 		    %% reply [message id] to client
 		    %% after [message] was sent, reply message was sent

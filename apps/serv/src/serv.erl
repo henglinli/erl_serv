@@ -15,7 +15,7 @@
 -export([ping/0,
 	 get_apl/3,
 	 get_apl_user/2,
-	 send/4
+	 send/2
 	]).
 
 %%%===================================================================
@@ -46,11 +46,14 @@ get_apl_user(Name, N)
     get_apl(?USER, Name, N).
 
 -spec send(From :: pid(),
-	   ToWho :: binary(),
-	   TheMessage :: term() | {Id :: integer(), Message :: binary()},
-	   N :: integer()) ->
+	   TheMessage :: term() |
+			 {Id :: integer(),
+			  ToWho :: binary(),
+			  Message :: binary(),
+			  N :: integer()}
+			 ) ->
 		  forword | save | {error, Reason :: term()}.
-send(From, ToWho, {Id, Message}, N)
+send(From, {Id, ToWho, Message, N})
   when erlang:is_pid(From)
        andalso erlang:is_binary(ToWho)
        andalso erlang:is_integer(Id)
@@ -58,7 +61,7 @@ send(From, ToWho, {Id, Message}, N)
        andalso erlang:is_integer(N) ->
     %% message {froward, Message} was send by serv_send_worker
     %% and handle by serv_vnode_work
-    serv_worker_pool:handle_work({forward, ToWho, {Id, Message}, N}, From);
+    serv_worker_pool:handle_work({forward, {Id, ToWho, Message, N}}, From);
 
-send(From, ToWho, Message, N) ->
-    serv_worker_pool:handle_work({forward, ToWho, Message, N}, From).
+send(From, Message) ->
+    serv_worker_pool:handle_work(Message, From).

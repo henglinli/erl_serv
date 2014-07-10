@@ -31,8 +31,8 @@ handle_work(ping, _Sender, State) ->
     {reply, pong, State};
 
 %% forward message
-handle_work({forward, {Id, Message}}, _Sender, State) ->
-    lager:info("forward mesasge {~p : ~p}", [Id, Message]),
+handle_work({forward, {Id, ToWho, Message}}, _Sender, State) ->
+    lager:info("forward mesasge {~p, ~p, ~p}", [Id, ToWho, Message]),
     {reply, forword, State};
 
 %% unknown

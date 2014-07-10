@@ -32,7 +32,8 @@
 -define(SERVER, ?MODULE).
 
 -define(PING_CODE, 1).
--define(AUTH_CODE, 3).
+-define(SELECT_CODE, 3).
+-define(AUTH_CODE, 5).
 
 -record(state, {transport = {gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
 						% socket
@@ -339,14 +340,23 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
     NotImpl = encode(#response{errmsg = <<"not implement">>,
 			       errcode = 4}),
     case parse_packat(Packet) of
-	% unkown packat
+	%% unkown packat
 	undefined ->
 	    {next_state, reply_then_stop,
 	     State#state{response = BadPacket}, 0};
-	% ping packet
+	%% ping packet
 	{?PING_CODE, _MsgData} ->
 	    {next_state, wait_for_auth, State#state{response = Ok}, 0};
-	% auth packet, register or login
+	%% select packet
+	{?SELECT_CODE, MsgData} ->
+	    case serv_pb_base_pb:decode(select, MsgData) of
+		#select{user = _User} ->
+		    {next_state, wait_for_auth, State#state{response = Ok}, 0};
+		_Other ->
+		    {next_state, reply_then_stop,
+		     State#state{response = InternalErr}, 0}
+	    end;
+	%% auth packet, register or login
 	{?AUTH_CODE, MsgData} ->
 	    case serv_pb_base_pb:decode(auth, MsgData) of
 		#auth{user = User, password = _Password, how = How} ->

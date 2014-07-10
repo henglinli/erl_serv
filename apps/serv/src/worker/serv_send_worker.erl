@@ -35,13 +35,18 @@ init_worker([]) ->
     {reply, Reply :: term(), NewWorkState :: term()} |
     {noreply, NewWorkState :: term()}.
 
-handle_work({forward, ToWho, {Id, Message}, N}, _WorkFrom, WorkState) ->
+%% select server
+handle_work({select, _User}, _WorkFrom, WorkState) ->
+    {noreply, WorkState};
+
+%% forward message
+handle_work({forward, {Id, ToWho, Message, N}}, _WorkFrom, WorkState) ->
     case get_apl(?MESSAGE, ToWho, N) of
 	[] ->
 	    Reply = encode_reply(Id, 1, <<"serv donw">>),
 	    {reply, {?MODULE, Reply}, WorkState};
 	PrefList ->
-	    Reply = forward_reply(PrefList, Id, Message),
+	    Reply = forward_reply(PrefList, Id, {Id, ToWho, Message}),
 	    {reply, {?MODULE, Reply}, WorkState}
     end;
 
