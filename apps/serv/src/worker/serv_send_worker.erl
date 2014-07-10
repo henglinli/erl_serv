@@ -48,13 +48,18 @@ handle_work({forward, ToWho, {Id, Message}, N}, _WorkFrom, WorkState) ->
 handle_work(Work, WorkFrom, WorkState) ->
     lager:debug("work ~p from ~p", [Work, WorkFrom]),
     {reply, {?MODULE, {unkown_work, Work}}, WorkState}.
+
 %% reply
 -spec reply(WorkFrom :: term(), Reply :: term()) ->
     ok | {error, Reason :: term()}.
+%% this function is test only,
+%% and never used in producntion .
+reply(WorkFrom, {?MODULE, {unkown_work, Work}}) ->
+    WorkFrom ! {unkown_work , Work};
 
 %% message will reply to serv_pb_server
-reply(WorkFrom, {?MODULE, Info}) ->
-    serv_pb_server:sync_send({pid, WorkFrom}, Info);
+reply(WorkFrom, {?MODULE, Reply}) ->
+    serv_pb_server:sync_send({pid, WorkFrom}, Reply);
 
 reply(_WorkFrom, _Reply) ->
     {error, not_impl}.

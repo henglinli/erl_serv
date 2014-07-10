@@ -39,7 +39,7 @@
 		socket = undefined :: undefined | inet:socket() | ssl:sslsocket(),
 		request = undefined :: undefined | term(),  % current request
 		peername = undefined :: undefined | {inet:ip_address(), inet:port_number()},
-		states = [] :: orddict:orddict(), % per-service connection state
+		states = undefined :: term(), % per-service connection state
 		response = <<>> :: binary(),
 		session = undefined :: term()
 	       }).
@@ -397,11 +397,11 @@ handle_info({tcp, Socket, Packet}, _StateName,
 		    case Handler:handle(MsgData, HandlerStates) of
 			{noreply, NewHandlerStates} ->
 			    {next_state, ready,
-			     State#state{session = NewHandlerStates}};
+			     State#state{states = NewHandlerStates}};
 			{reply, Response, NewHandlerStates} ->
 			    {next_state, reply,
 			     State#state{response = Response,
-					 session = NewHandlerStates}, 0};
+					 states = NewHandlerStates}, 0};
 			{error, _Reason} ->
 			    {next_state, reply_then_stop,
 			     State#state{response = InternalErr}, 0}

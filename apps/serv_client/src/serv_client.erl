@@ -427,22 +427,21 @@ s({MegaSecs, Secs, _MicroSecs}) ->
 %%
 -spec test(Clients :: pos_integer()) -> term().
 test(Clients) ->
-    test_helper(Clients, 1).
+    test_helper(Clients, ok).
 
-test_helper(0, _Done) ->
+test_helper(0, ok) ->
     ok;
 
-test_helper(Do, Done) ->
-    case do_test(Done) of
-	ok ->
-	    test_helper(Do - 1, Done + 1);
-	error ->
-	    error
-    end.
+test_helper(_N, error) ->
+    error;
 
-do_test(Do) ->
-    DoBin = erlang:integer_to_binary(Do),
-    User = <<"lee@", DoBin/binary>>,
+test_helper(N, ok) ->
+    Result = do_test(N),
+    test_helper(N - 1, Result).
+
+do_test(N) ->
+    Id = erlang:integer_to_binary(N),
+    User = <<"lee@", Id/binary>>,
     case serv_client_sup:start_child() of
 	{ok , Pid} ->
 	    serv_client:connect(Pid),
