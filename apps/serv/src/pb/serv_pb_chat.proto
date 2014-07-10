@@ -1,5 +1,8 @@
 // HenryLee<henglinli@gmail.com>
 //
+// *** request was registered odd interger (2N-1) in server,
+// *** and it's response, if had, will be (2N)
+//
 // how chat was handle by Server and Client
 // Server               Client
 //            <--       [chat]
@@ -8,25 +11,25 @@
 // [reply]    -->
 // so, one request two response
 //
-// chat
+// chat, client request chat
+// will register as 5
 message chat {
-  required bytes from = 1;
-  required bytes to = 2;
-  required uint32 time = 3;
-  required bytes msg = 4;
+  required bytes from = 1;  // from who, will checked by server
+  required bytes to = 2;    // to who, maybe checked by server
+  optional uint32 time = 3; // time, not be checked by server
+  required bytes msg = 4;   // the message
 }
-// chat id
+// chat id, client should read as 6
 // as soon as serv_pb_server recved [chat],
 // it reply [chat_id] to client
 message chat_id {
   required uint32 id = 1;
 }
-// after chat was sent,
+// client should read as 8
 // serv_pb_server reply [reply].
 message reply {
   // chat id
-  required uint32 id = 1;
-  // chat reponse
-  required uint32 errcode = 2;
-  required bytes errmsg = 3;
+  required uint32 id = 1; // the chat id
+  required uint32 errcode = 2; // ToDo: error list will descripted later
+  optional bytes errmsg = 3; // error message
 }

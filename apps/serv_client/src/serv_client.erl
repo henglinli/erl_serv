@@ -242,19 +242,16 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
+handle_sync_event(ping, _From, do_connect, State) ->
+    {reply, not_connected, do_connect, State);
 handle_sync_event(ping, _From, StateName,
 		  State = #state{socket = Socket}) ->
-    case StateName of
-	do_connect ->
-	    {reply, not_connected, StateName, State};
-	_OtherStae ->
-	    Ping = [1, <<"ping">>],%serv_pb_codec:encode(ping),
-	    case gen_tcp:send(Socket, Ping) of
-		{error, Reason} ->
-		    {stop, Reason, {error, Reason}, State};
-		ok ->
-		    {reply, ok, StateName, State}
-	    end
+    Ping = [1, <<"ping">>],%serv_pb_codec:encode(ping),
+    case gen_tcp:send(Socket, Ping) of
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	ok ->
+	    {reply, ok, StateName, State}
     end;
 
 handle_sync_event(stop, _From, _StateName, State) ->
