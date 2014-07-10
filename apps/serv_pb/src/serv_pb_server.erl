@@ -189,14 +189,15 @@ wait_for_socket({set_socket, Socket}, _From,
 
 wait_for_socket(_Event, _From, State) ->
     {reply, unknown_message, wait_for_socket, State}.
-%% auth
+
+%% auth, only for ping
 wait_for_auth(timeout, #state{socket = Socket,
 			      transport = {Transport, Control},
 			      response = Response} = State) ->
     case Transport:send(Socket, Response) of
 	ok ->
 	    Control:setopts(Socket, [{active, once}]),
-	    {next_state, ready, State};
+	    {next_state, wait_for_auth, State};
 	{error, Reason} ->
 	    lager:debug("send error: ~p", [Reason]),
 	    {stop, Reason, State}

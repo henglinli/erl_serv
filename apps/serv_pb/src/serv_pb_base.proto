@@ -6,7 +6,7 @@ message response {
   // error message code
   required uint32 errcode = 1;
   // error message
-  required bytes errmsg = 2;
+  optional bytes errmsg = 2;
 }
 
 // ping

@@ -464,7 +464,7 @@ login_one() ->
     case serv_client_sup:start_child() of
 	{ok , Pid} ->
 	    ok = serv_client:connect(Pid, "localhost", 8087, <<"lee">>, <<"lee">>),
-	    {ok, Pid}
+	    {ok, Pid};
 	{error, Reason} ->
 	    {error, Reason}
     end.
