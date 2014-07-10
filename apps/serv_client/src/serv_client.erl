@@ -477,8 +477,8 @@ chat_test() ->
 	    case serv_client_sup:start_child() of
 		{ok, Pid1} ->
 		    ok = serv_client:connect(Pid1, "localhost", 8087, <<"google">>, <<"google">>),
-		    ok = serv_client:chat(Pid1),
-		    ok = serv_client:chat(Pid),
+		    ok = serv_client:chat(Pid1, <<"lee">>),
+		    ok = serv_client:chat(Pid, <<"google">>),
 		    ok;
 		{error, _Reason} ->
 		    error
