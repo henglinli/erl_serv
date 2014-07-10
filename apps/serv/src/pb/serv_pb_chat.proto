@@ -13,6 +13,7 @@
 //
 // chat, client request chat
 // will register as 5
+// chat from other one, client should read as 10
 message chat {
   required bytes from = 1;  // from who, will checked by server
   required bytes to = 2;    // to who, maybe checked by server

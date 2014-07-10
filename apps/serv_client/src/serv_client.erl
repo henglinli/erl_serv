@@ -148,7 +148,7 @@ do_connect({connect_then_login, Host, Port, User, Password}, _From, State) ->
     end;
 
 do_connect(_Event, _From, State) ->
-    {reply, "Need connect", do_connect, State}.
+    {reply, not_connected, do_connect, State}.
 
 %% do login
 do_login(timeout, State = #state{socket = Socket,
@@ -243,7 +243,8 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event(ping, _From, do_connect, State) ->
-    {reply, not_connected, do_connect, State);
+    {reply, not_connected, do_connect, State};
+
 handle_sync_event(ping, _From, StateName,
 		  State = #state{socket = Socket}) ->
     Ping = [1, <<"ping">>],%serv_pb_codec:encode(ping),
@@ -345,6 +346,16 @@ handle_packet(Packet) ->
 	    lager:info("recved: {~p, ~p}", [ErrCode, ErrMsg]),
 	    noreply;
 	{6, MsgData} ->
+	    #chat_id{id = Id}
+		= serv_pb_chat_pb:decode(chat_id, MsgData),
+	    lager:info("chat_id: ~p", [Id]),
+	    noreply;
+	{8, MsgData} ->
+	    #reply{id = Id, errcode = ErrCode, errmsg = ErrMsg}
+		= serv_pb_chat_pb:decode(reply, MsgData),
+	    lager:info("chat_id: ~p -> {~p, ~p}", [Id, ErrCode, ErrMsg]),
+	    noreply;
+	{10, MsgData} ->
 	    #chat{from = From, to = To, msg = Msg, time = Time}
 		= serv_pb_chat_pb:decode(chat, MsgData),
 	    lager:info("{~p, ~p, ~p, ~p}", [Time, From, To, Msg]),

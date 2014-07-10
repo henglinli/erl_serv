@@ -161,7 +161,7 @@ wait_for_socket(_Event, State) ->
 %% @end
 %%--------------------------------------------------------------------
 wait_for_socket({set_socket, Socket}, _From,
-		State = #state{transport= {_Transport, Control}}) ->
+		#state{transport= {_Transport, Control}} = State) ->
     case Control:peername(Socket) of
 	{ok, PeerInfo} ->
 	    Control:setopts(Socket, [{active, once}]),
@@ -190,6 +190,18 @@ wait_for_socket({set_socket, Socket}, _From,
 wait_for_socket(_Event, _From, State) ->
     {reply, unknown_message, wait_for_socket, State}.
 %% auth
+wait_for_auth(timeout, #state{socket = Socket,
+			      transport = {Transport, Control},
+			      response = Response} = State) ->
+    case Transport:send(Socket, Response) of
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, ready, State};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, State}
+    end;
+
 wait_for_auth(_Event, State) ->
     {next_state, wait_for_auth, State}.
 
@@ -207,9 +219,9 @@ ready(_Event, _From, State) ->
     {reply, unknown_message, ready, State}.
 
 %% reply
-reply(timeout, State=#state{socket = Socket,
-			    transport = {Transport, Control},
-			    response = Response}) ->
+reply(timeout, #state{socket = Socket,
+		      transport = {Transport, Control},
+		      response = Response} = State) ->
     case Transport:send(Socket, Response) of
 	ok ->
 	    Control:setopts(Socket, [{active, once}]),
@@ -226,10 +238,10 @@ reply(_Event, _From, State) ->
     {reply, unknown_message, ready, State}.
 
 %% reply then stop
-reply_then_stop(timeout, State=#state{response=Response,
-				     socket = Socket,
-				     transport = {Transport, _Control}
-				    }) ->
+reply_then_stop(timeout, #state{response=Response,
+				socket = Socket,
+				transport = {Transport, _Control}
+			       } = State) ->
     case Transport:send(Socket, Response) of
 	ok ->
 	    {stop, normal, State};
@@ -299,6 +311,7 @@ handle_info({tcp_closed, _Socket}, _StateName, State) ->
 handle_info({tcp_error, _Socket, _Reason}, _StateName, State) ->
     {stop, normal, State#state{socket = undefined}};
 
+%% maybe not needed
 handle_info({tcp, Socket, _Data}, handle_info, State) ->
     %% req =/= undefined: received a new request while another was in
     %% progress -> Error
@@ -311,9 +324,9 @@ handle_info({tcp, Socket, _Data}, handle_info, State) ->
 		 response = Response}, 0};
 
 handle_info({tcp, Socket, Packet}, wait_for_auth,
-	    State = #state{request=undefined,
-			   socket=Socket,
-			   peername = _PeerInfo}) ->
+	    #state{request=undefined,
+		   socket=Socket,
+		   peername = _PeerInfo} = State) ->
     Ok = encode(#response{errmsg = <<"Ok">>,
 			  errcode = 0}),
     BadPacket = encode(#response{errmsg = <<"bad packet">>,
@@ -368,9 +381,9 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
     end;
 
 handle_info({tcp, Socket, Packet}, _StateName,
-	    State = #state{request=undefined,
-			   socket=Socket,
-			   states = HandlerStates}) ->
+	    #state{request=undefined,
+		   socket=Socket,
+		   states = HandlerStates} = State) ->
     Ok = encode(#response{errmsg = <<"Ok">>,
 			  errcode = 0}),
     BadPacket = encode(#response{errmsg = <<"bad packet">>,
