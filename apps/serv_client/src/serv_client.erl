@@ -463,10 +463,10 @@ login_one() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
 	{ok , Pid} ->
-	    serv_client:connect(Pid, "localhost", 8087, <<"lee">>, <<"lee">>),
-	    ok;
-	{error, _Reason} ->
-	    error
+	    ok = serv_client:connect(Pid, "localhost", 8087, <<"lee">>, <<"lee">>),
+	    {ok, Pid}
+	{error, Reason} ->
+	    {error, Reason}
     end.
 
 chat_test() ->

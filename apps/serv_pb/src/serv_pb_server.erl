@@ -344,7 +344,7 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
 	     State#state{response = BadPacket}, 0};
 	% ping packet
 	{?PING_CODE, _MsgData} ->
-	    {next_state, reply, State#state{response = Ok}, 0};
+	    {next_state, wait_for_auth, State#state{response = Ok}, 0};
 	% auth packet, register or login
 	{?AUTH_CODE, MsgData} ->
 	    case serv_pb_base_pb:decode(auth, MsgData) of
