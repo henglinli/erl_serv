@@ -9,7 +9,7 @@
 -module(serv_pb_handler_chat).
 
 -include("serv.hrl").
--include_lib("serv_pb/include/serv_pb_base_pb.hrl").
+-include("serv_pb_base_pb.hrl").
 -include("serv_pb_chat_pb.hrl").
 %% API
 -export([handle/2]).
@@ -29,14 +29,14 @@ handle(Chat, undefined) ->
 	    lager:info("chat to ~p", [To]),
 	    case To of
 		Self ->
-		    {reply, [0, EncodedOk], undefined};
+		    {reply, [?RESPONSE_CODE, EncodedOk], undefined};
 		_To ->
 		    %% send [mesasge] to server
 		    ok = serv:send(erlang:self(), {forward, 1, To, Chat, ?N}),
 		    EncodedChatId = encode_chat_id(1),
 		    %% reply [message id] to client
 		    %% after [message] was sent, reply message was sent
-		    {reply, [6, EncodedChatId], #state{last_id=1}}
+		    {reply, [?CHAT_ID_CODE, EncodedChatId], #state{last_id=1}}
 	    end;
 	_Other ->
 	    Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},
@@ -52,7 +52,7 @@ handle(Chat, #state{last_id = LastId} = State) ->
 	    lager:info("chat to ~p", [To]),
 	    case To of
 		Self ->
-		    {reply, [0, EncodedOk], State};
+		    {reply, [?RESPONSE_CODE, EncodedOk], State};
 		_To ->
 		    %% send [mesasge] to server
 		    Id = LastId + 1,
@@ -60,7 +60,7 @@ handle(Chat, #state{last_id = LastId} = State) ->
 		    EncodedChatId = encode_chat_id(Id),
 		    %% reply [message id] to client
 		    %% after [message] was sent, reply message was sent
-		    {reply, [6, EncodedChatId], #state{last_id=Id}}
+		    {reply, [?CHAT_ID_CODE, EncodedChatId], #state{last_id=Id}}
 	    end;
 	_Other ->
 	    Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},

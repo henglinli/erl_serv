@@ -43,8 +43,8 @@ init([]) ->
     %%                              []),
 
     ServVnodeSpec = {?SERV,
-                     {riak_core_vnode_master, start_link, [serv_vnode]},
-                     Restart, Shutdown, worker, [riak_core_vnode_master]},
+		     {riak_core_vnode_master, start_link, [serv_vnode]},
+		     Restart, Shutdown, worker, [riak_core_vnode_master]},
     %% ServFsmPoolSpec = serv_fsm_pool:pool_spec(),
 
     %% ServFsmSupSpec = {serv_fsm_sup,
@@ -52,13 +52,18 @@ init([]) ->
     %%                Restart, Shutdown, supervisor, [serv_fsm_sup]},
 
     ServWokerPoolSupSpec = {serv_worker_pool_sup,
-                            {serv_worker_pool_sup, start_link, []},
-                            Restart, Shutdown, worker, [serv_worker_pool_sup]},
+			    {serv_worker_pool_sup, start_link, []},
+			    Restart, Shutdown, worker, [serv_worker_pool_sup]},
+
+    ServPbSupSpec = {serv_pb_sup,
+		     {serv_pb_sup, start_link, []},
+		     Restart, Shutdown, supervisor, [serv_pb_sup]},
 
     {ok, {SupFlags, [%RanchSupSpec,
-                     %ListenerSpec,
-                     ServVnodeSpec,
-                     %ServFsmPoolSpec
-                     %ServFsmSupSpec
-                     ServWokerPoolSupSpec
-                    ]}}.
+		     %ListenerSpec,
+		     ServVnodeSpec,
+		     %ServFsmPoolSpec
+		     %ServFsmSupSpec
+		     ServWokerPoolSupSpec,
+		     ServPbSupSpec
+		    ]}}.

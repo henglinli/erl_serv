@@ -9,7 +9,7 @@
 -module(serv_pb_server).
 -author('HenryLee<henglinli@gmail.com>').
 
-%-include("serv_pb.hrl").
+-include("serv.hrl").
 -include("serv_pb_base_pb.hrl").
 
 -behaviour(gen_fsm).
@@ -30,10 +30,6 @@
 -export([set_socket/2, send/2, sync_send/2]).
 
 -define(SERVER, ?MODULE).
-
--define(PING_CODE, 1).
--define(SELECT_CODE, 3).
--define(AUTH_CODE, 5).
 
 -record(state, {transport = {gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
 						% socket
@@ -215,8 +211,9 @@ wait_for_auth({server, Ip}, _From,
 	      #state{socket = Socket,
 		     transport = {Transport, Control}} = State) ->
     Server = #server{errcode=0, ip=Ip},
-    Response = serv_pb_base_pb:encode(server, Server),
-    case Transport:send(Socket, Response) of
+    Response = serv_pb_base_pb:encode(Server),
+    Reply = [?SERVER_CODE, Response],
+    case Transport:send(Socket, Reply) of
 	ok ->
 	    Control:setopts(Socket, [{active, once}]),
 	    {next_state, wait_for_auth, State};
@@ -527,4 +524,4 @@ parse_packat(_) ->
 
 -spec encode(Error :: #response{}) -> Response::iolist().
 encode(Error) ->
-    [0 | serv_pb_base_pb:encode(Error)].
+    [?RESPONSE_CODE | serv_pb_base_pb:encode(Error)].

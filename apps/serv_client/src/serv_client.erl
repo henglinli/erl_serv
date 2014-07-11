@@ -12,7 +12,7 @@
 
 -behaviour(gen_fsm).
 
--include_lib("serv_pb/include/serv_pb_base_pb.hrl").
+-include_lib("serv/include/serv_pb_base_pb.hrl").
 -include_lib("serv/include/serv_pb_chat_pb.hrl").
 
 %% API
@@ -156,7 +156,7 @@ do_login(timeout, State = #state{socket = Socket,
 				 password = Password}) ->
     ProtobufAuth = #auth{user = NewSelf, password = Password, how = 2},
     Auth = serv_pb_base_pb:encode(ProtobufAuth),
-    case gen_tcp:send(Socket, [3, Auth]) of
+    case gen_tcp:send(Socket, [5, Auth]) of
 	{error, Reason} ->
 	    {stop, Reason, {error, Reason}, State};
 	ok ->
@@ -171,7 +171,7 @@ do_login({login, NewSelf, Password}, _From,
 	 State = #state{socket = Socket}) ->
     ProtobufAuth = #auth{user = NewSelf, password = Password, how = 2},
     Auth = serv_pb_base_pb:encode(ProtobufAuth),
-    case gen_tcp:send(Socket, [3, Auth]) of
+    case gen_tcp:send(Socket, [5, Auth]) of
 	{error, Reason} ->
 	    {stop, Reason, {error, Reason}, State};
 	ok ->
@@ -191,7 +191,7 @@ do_request(#request{command = chat, data = {To, Msg}}, _From,
 			 time = s(os:timestamp()),
 			 msg = Msg},
     Chat = serv_pb_chat_pb:encode(ProtobufChat),
-    case gen_tcp:send(Socket, [5, Chat]) of
+    case gen_tcp:send(Socket, [11, Chat]) of
 	{error, Reason} ->
 	    {stop, Reason, {error, Reason}, State};
 	ok ->
@@ -345,17 +345,17 @@ handle_packet(Packet) ->
 		= serv_pb_base_pb:decode(response, MsgData),
 	    lager:info("recved: {~p, ~p}", [ErrCode, ErrMsg]),
 	    noreply;
-	{6, MsgData} ->
+	{12, MsgData} ->
 	    #chat_id{id = Id}
 		= serv_pb_chat_pb:decode(chat_id, MsgData),
 	    lager:info("chat_id: ~p", [Id]),
 	    noreply;
-	{8, MsgData} ->
+	{14, MsgData} ->
 	    #reply{id = Id, errcode = ErrCode, errmsg = ErrMsg}
 		= serv_pb_chat_pb:decode(reply, MsgData),
 	    lager:info("chat_id: ~p -> {~p, ~p}", [Id, ErrCode, ErrMsg]),
 	    noreply;
-	{10, MsgData} ->
+	{16, MsgData} ->
 	    #chat{from = From, to = To, msg = Msg, time = Time}
 		= serv_pb_chat_pb:decode(chat, MsgData),
 	    lager:info("{~p, ~p, ~p, ~p}", [Time, From, To, Msg]),

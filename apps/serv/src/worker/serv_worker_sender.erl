@@ -10,7 +10,7 @@
 
 -include("serv.hrl").
 -include("serv_pb_chat_pb.hrl").
--include_lib("serv_pb/include/serv_pb_base_pb.hrl").
+-include("serv_pb_base_pb.hrl").
 -behaviour(serv_worker).
 
 %% serv_worker callback

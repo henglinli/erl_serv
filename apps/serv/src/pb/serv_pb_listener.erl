@@ -23,8 +23,8 @@ init([PortNum]) ->
 %% @doc Preferred socket options for the listener.
 -spec sock_opts() -> [gen_tcp:option()].
 sock_opts() ->
-    BackLog = app_helper:get_env(serv_pb, pb_backlog, 128),
-    NoDelay = app_helper:get_env(serv_pb, disable_pb_nagle, true),
+    BackLog = app_helper:get_env(serv, pb_backlog, 128),
+    NoDelay = app_helper:get_env(serv, disable_pb_nagle, true),
     [binary, {packet, 2}, {reuseaddr, true}, {backlog, BackLog}, {nodelay, NoDelay}].
 
 %% @doc The handle_call/3 gen_nb_server callback. Unused.
@@ -75,5 +75,5 @@ new_connection(Socket, State) ->
     end.
 
 get_listeners() ->
-    Listeners = app_helper:get_env(serv_pb, pb, [{"127.0.0.1", 8087}]),
+    Listeners = app_helper:get_env(serv, pb, [{"127.0.0.1", 8087}]),
     [ {I, P} || {I, P} <- Listeners ].

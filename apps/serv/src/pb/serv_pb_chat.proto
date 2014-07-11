@@ -12,21 +12,21 @@
 // so, one request two response
 //
 // chat, client request chat
-// will register as 5
-// chat from other one, client should read as 10
+// will register as 11
+// chat from other one, client should read as 16
 message chat {
   required bytes from = 1;  // from who, will checked by server
   required bytes to = 2;    // to who, maybe checked by server
   optional uint32 time = 3; // time, not be checked by server
   required bytes msg = 4;   // the message
 }
-// chat id, client should read as 6
+// chat id, client should read as 12
 // as soon as serv_pb_server recved [chat],
 // it reply [chat_id] to client
 message chat_id {
   required uint32 id = 1;
 }
-// client should read as 8
+// client should read as 14
 // serv_pb_server reply [reply].
 message reply {
   // chat id
