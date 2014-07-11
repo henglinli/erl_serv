@@ -8,6 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(serv_pb_handler_chat).
 
+-include("serv.hrl").
 -include_lib("serv_pb/include/serv_pb_base_pb.hrl").
 -include("serv_pb_chat_pb.hrl").
 %% API
@@ -31,7 +32,7 @@ handle(Chat, undefined) ->
 		    {reply, [0, EncodedOk], undefined};
 		_To ->
 		    %% send [mesasge] to server
-		    ok = serv:send(erlang:self(), {1, To, Chat, 3}),
+		    ok = serv:send(erlang:self(), {forward, 1, To, Chat, ?N}),
 		    EncodedChatId = encode_chat_id(1),
 		    %% reply [message id] to client
 		    %% after [message] was sent, reply message was sent
@@ -55,7 +56,7 @@ handle(Chat, #state{last_id = LastId} = State) ->
 		_To ->
 		    %% send [mesasge] to server
 		    Id = LastId + 1,
-		    ok = serv:send(erlang:self(), {Id, To, Chat, 3}),
+		    ok = serv:send(erlang:self(), {forward, Id, To, Chat, ?N}),
 		    EncodedChatId = encode_chat_id(Id),
 		    %% reply [message id] to client
 		    %% after [message] was sent, reply message was sent

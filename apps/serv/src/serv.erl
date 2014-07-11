@@ -47,13 +47,17 @@ get_apl_user(Name, N)
 
 -spec send(From :: pid(),
 	   TheMessage :: term() |
-			 {Id :: integer(),
+			 {select,
+			  User :: binary(),
+			  N :: integer()} |
+			 {forward,
+			  Id :: integer(),
 			  ToWho :: binary(),
 			  Message :: binary(),
-			  N :: integer()}
-			 ) ->
+			  N :: integer()}) ->
 		  forword | save | {error, Reason :: term()}.
-send(From, {Id, ToWho, Message, N})
+%% forward message to other
+send(From, {forward, Id, ToWho, Message, N})
   when erlang:is_pid(From)
        andalso erlang:is_binary(ToWho)
        andalso erlang:is_integer(Id)
@@ -61,7 +65,10 @@ send(From, {Id, ToWho, Message, N})
        andalso erlang:is_integer(N) ->
     %% message {froward, Message} was send by serv_send_worker
     %% and handle by serv_vnode_work
-    serv_worker_pool:handle_work({forward, {Id, ToWho, Message, N}}, From);
-
+    serv_worker_pool:handle_work({forward, Id, ToWho, Message, N}, From);
+%% select server
+send(From, {select, User, N}) ->
+    serv_worker_pool:handle_work({select, User, N}, From);
+%% other message
 send(From, Message) ->
     serv_worker_pool:handle_work(Message, From).

@@ -94,6 +94,10 @@ sync_send({name, Who}, Message)
 		      Sessions)
     end;
 
+sync_send({pid, Pid}, {server, _Ip} = Server)
+  when erlang:is_pid(Pid) ->
+    gen_fsm:sync_send_event(Pid, Server);
+
 sync_send({pid, Pid}, Message)
     when erlang:is_pid(Pid) ->
     gen_fsm:sync_send_event(Pid, {message, Message}).
@@ -206,6 +210,20 @@ wait_for_auth(timeout, #state{socket = Socket,
 
 wait_for_auth(_Event, State) ->
     {next_state, wait_for_auth, State}.
+%% for select
+wait_for_auth({server, Ip}, _From,
+	      #state{socket = Socket,
+		     transport = {Transport, Control}} = State) ->
+    Server = #server{errcode=0, ip=Ip},
+    Response = serv_pb_base_pb:encode(server, Server),
+    case Transport:send(Socket, Response) of
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, wait_for_auth, State};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, State}
+    end;
 
 wait_for_auth(_Event, _From, State) ->
     {reply, unknown_message, wait_for_auth, State}.
@@ -350,8 +368,9 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
 	%% select packet
 	{?SELECT_CODE, MsgData} ->
 	    case serv_pb_base_pb:decode(select, MsgData) of
-		#select{user = _User} ->
-		    {next_state, wait_for_auth, State#state{response = Ok}, 0};
+		#select{user = User} ->
+		    ok = serv:send(erlang:self(), {select, User, 1}),
+		    {next_state, wait_for_auth, State};
 		_Other ->
 		    {next_state, reply_then_stop,
 		     State#state{response = InternalErr}, 0}

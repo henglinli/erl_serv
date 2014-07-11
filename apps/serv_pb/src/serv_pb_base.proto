@@ -22,9 +22,11 @@ message select {
 }
 
 // [server]
+// client should read as 4
 message server {
-  required bool re = 1; // should reconnect
-  optional bytes ip = 2; // ip, will next to connect
+  required uint32 errcode = 1; // error code
+  optional bytes errmsg = 2;   // error message
+  optional bytes ip = 3;       // ip, will next to connect
 }
 
 // [auth] <- [response]

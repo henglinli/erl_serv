@@ -77,7 +77,7 @@ init([]) ->
 			   {serv_worker_pool, start_link, []},
 			   Restart, Shutdown, Type, [serv_worker_pool]},
 
-    Args = [{worker_callback_mod, serv_send_worker},
+    Args = [{worker_callback_mod, serv_worker_sender},
 	    {worker_args, []}],
 
     ServWorkerSpecs = serv_worker_spec(8, Args, []),

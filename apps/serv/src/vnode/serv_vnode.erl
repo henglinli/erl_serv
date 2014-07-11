@@ -17,11 +17,9 @@
 	 handle_coverage/4,
 	 handle_exit/3]).
 
--ignore_xref([
-	      start_vnode/1
-	     ]).
+-ignore_xref([start_vnode/1]).
 
--record(state, {partition}).
+-record(state, {server :: binary(), partition}).
 
 %% API
 start_vnode(I) ->
@@ -34,7 +32,7 @@ init([Partition]) ->
     {ok, #state{partition = Partition}, [WorkerPool]}.
 -else.
 init([Partition]) ->
-    {ok, #state{partition = Partition}}.
+    {ok, #state{partition = Partition, server=get_host()}}.
 -endif.
 %% proxy of forward message
 -ifdef(USE_POOL).
@@ -45,6 +43,9 @@ forward(Message, _Sender, State) ->
     lager:info("forward mesasge: ~p", [Message]),
     {reply, forward, State}.
 -endif.
+%% select server
+handle_command(select, _Sender, #state{server=Server} = State) ->
+    {reply, {ok, Server}, State};
 %% forward message
 handle_command({forward, Message}, Sender, State) ->
     forward(Message, Sender, State);
@@ -94,3 +95,14 @@ handle_exit(_Pid, _Reason, State) ->
 
 terminate(_Reason, _State) ->
     ok.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+-spec get_host() -> binary().
+get_host() ->
+    NodeString = erlang:atom_to_list(erlang:node()),
+    [_Char | Server] = lists:dropwhile(fun(Char) ->
+					       Char /= $@
+				       end,
+				       NodeString),
+    erlang:list_to_binary(Server).
