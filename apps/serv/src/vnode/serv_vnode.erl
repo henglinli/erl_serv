@@ -3,19 +3,19 @@
 -include("serv.hrl").
 
 -export([start_vnode/1,
-	 init/1,
-	 terminate/2,
-	 handle_command/3,
-	 is_empty/1,
-	 delete/1,
-	 handle_handoff_command/3,
-	 handoff_starting/2,
-	 handoff_cancelled/1,
-	 handoff_finished/2,
-	 handle_handoff_data/2,
-	 encode_handoff_item/2,
-	 handle_coverage/4,
-	 handle_exit/3]).
+         init/1,
+         terminate/2,
+         handle_command/3,
+         is_empty/1,
+         delete/1,
+         handle_handoff_command/3,
+         handoff_starting/2,
+         handoff_cancelled/1,
+         handoff_finished/2,
+         handle_handoff_data/2,
+         encode_handoff_item/2,
+         handle_coverage/4,
+         handle_exit/3]).
 
 -ignore_xref([start_vnode/1]).
 
@@ -45,6 +45,7 @@ forward(Message, _Sender, State) ->
 -endif.
 %% select server
 handle_command(select, _Sender, #state{server=Server} = State) ->
+    lager:info("select", []),
     {reply, {ok, Server}, State};
 %% forward message
 handle_command({forward, Message}, Sender, State) ->
@@ -102,7 +103,7 @@ terminate(_Reason, _State) ->
 get_host() ->
     NodeString = erlang:atom_to_list(erlang:node()),
     [_Char | Server] = lists:dropwhile(fun(Char) ->
-					       Char /= $@
-				       end,
-				       NodeString),
+                                               Char /= $@
+                                       end,
+                                       NodeString),
     erlang:list_to_binary(Server).

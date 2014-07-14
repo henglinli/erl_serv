@@ -16,12 +16,12 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+         terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
 
 -record(state, {module :: atom(),
-		modstate :: any()}).
+                modstate :: any()}).
 
 %% init worker
 -callback init_worker(WorkerArgs :: term()) ->
@@ -32,14 +32,17 @@
     {reply, Reply :: term(), NewWorkState :: term()} |
     {noreply, NewWorkState :: term()}.
 %% reply
--callback reply(WorkFrom :: term(), Reply :: term()) ->
+-callback reply(WorkFrom :: term() | {pid, Pid :: pid()}, Reply :: term()) ->
     ok | {error, Reason :: term()}.
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-handle_work(Worker, Work, From) ->
-    gen_server:cast(Worker, {work, Work, From}).
+-spec handle_work({pid, Pid :: pid()} | {name, Name :: atom()},
+                  Work :: term(), From :: term()) ->
+                         ok | {error, Reason :: term()}.
+handle_work({pid, Pid}, Work, From) ->
+    gen_server:cast(Pid, {work, Work, From}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,17 +127,17 @@ handle_call(Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({work, Work, WorkFrom},
-	    #state{module = Mod, modstate = ModState} = State) ->
+            #state{module = Mod, modstate = ModState} = State) ->
     NewModState = case Mod:handle_work(Work, WorkFrom, ModState) of
-		      {reply, Reply, NS} ->
-			  Mod:reply(WorkFrom, Reply),
-			  NS;
-		      {noreply, NS} ->
-			  NS
-		  end,
+                      {reply, Reply, NS} ->
+                          Mod:reply(WorkFrom, Reply),
+                          NS;
+                      {noreply, NS} ->
+                          NS
+                  end,
     %% check the worker back into the pool
     %% gen_fsm:send_all_state_event(Caller, {checkin, self()}),
-    ok = serv_worker_pool:notify({checkin, erlang:self()}),
+    ok = serv_worker_pool:notify({pid, erlang:self()}),
     {noreply, State#state{modstate=NewModState}};
 
 handle_cast(_Msg, State) ->
