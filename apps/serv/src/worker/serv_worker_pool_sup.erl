@@ -87,24 +87,17 @@ init([]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-serv_worker_name(N) ->
-    NBinary = erlang:integer_to_binary(N),
-    Name = <<"serv_worker_", NBinary/binary>>,
-    erlang:binary_to_atom(Name, utf8).
-
 serv_worker_spec(0, _Args, Specs) ->
     Specs;
 
 serv_worker_spec(N, Args, []) ->
-    Name = serv_worker_name(N),
-    Spec = {Name,
-	    {serv_worker, start_link, [Name, Args, last]},
+    Spec = {undefined,
+	    {serv_worker, start_link, [Args, last]},
 	    permanent, 2000, worker, [serv_worker]},
     serv_worker_spec(N - 1, Args, [Spec]);
 
 serv_worker_spec(N, Args, Specs) ->
-    Name = serv_worker_name(N),
-    Spec = {Name,
-	    {serv_worker, start_link, [Name, Args]},
+    Spec = {undefined,
+	    {serv_worker, start_link, [Args]},
 	    permanent, 2000, worker, [serv_worker]},
     serv_worker_spec(N - 1, Args, [Spec] ++ Specs).
