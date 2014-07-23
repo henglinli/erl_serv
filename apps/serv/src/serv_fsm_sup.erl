@@ -79,7 +79,7 @@ init([]) ->
     Shutdown = brutal_kill,
     Type = worker,
 
-    ServFsmSpec = {undefined, {serv_fsm, start_link, []},
+    ServFsmSpec = {serv_fsm, {serv_fsm, start_link, []},
 		   Restart, Shutdown, Type, [serv_fsm]},
 
     {ok, {SupFlags, [ServFsmSpec]}}.

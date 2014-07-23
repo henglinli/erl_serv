@@ -91,13 +91,13 @@ serv_worker_spec(0, _Args, Specs) ->
     Specs;
 
 serv_worker_spec(N, Args, []) ->
-    Spec = {undefined,
+    Spec = {N,
 	    {serv_worker, start_link, [Args, last]},
 	    permanent, 2000, worker, [serv_worker]},
     serv_worker_spec(N - 1, Args, [Spec]);
 
 serv_worker_spec(N, Args, Specs) ->
-    Spec = {undefined,
+    Spec = {N,
 	    {serv_worker, start_link, [Args]},
 	    permanent, 2000, worker, [serv_worker]},
     serv_worker_spec(N - 1, Args, [Spec] ++ Specs).
