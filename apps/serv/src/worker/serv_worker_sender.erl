@@ -48,17 +48,20 @@ handle_work({select, User, _N}, _WorkFrom,
     end;
 
 %% forward message
-handle_work({forward, Id, ToWho, Message, N}, _WorkFrom, WorkState) ->
+handle_work({forward,
+	     #{id := Id, to := ToWho, msg := _Msg} = Message, N},
+	    WorkFrom, WorkState) ->
+    lager:info("woker ~p form ~p", [Message, WorkFrom]),
     case get_apl(?MESSAGE, ToWho, N) of
         [] ->
             {reply, {reply, {Id, 1, <<"serv down">>}}, WorkState};
         PrefList ->
-            Reply = forward_reply(Id, PrefList, {Id, ToWho, Message}),
+            Reply = forward_reply(Id, PrefList, {WorkFrom, Message}),
             {reply, {reply, Reply}, WorkState}
     end;
 
 handle_work(Work, WorkFrom, WorkState) ->
-    lager:debug("work ~p from ~p", [Work, WorkFrom]),
+    lager:warn("undefined work ~p from ~p", [Work, WorkFrom]),
     {reply, {unkown_work, Work}, WorkState}.
 
 %% reply
@@ -72,6 +75,7 @@ reply(WorkFrom, {unkown_work, Work}) ->
 %% select
 reply({pid, _Pid} = WorkFrom, {server, _Server} = Message) ->
     serv_pb_server:sync_send(WorkFrom, Message);
+
 %% message will reply to serv_pb_server
 reply({pid, _Pid} = WorkFrom, {reply, _Reply} = Message) ->
     serv_pb_server:sync_send(WorkFrom, Message);
@@ -130,22 +134,19 @@ send_select(PrefList, Servers) ->
 
 %% do_forward
 do_forward(IndexNode, RestPrefList, Message) ->
-    try
-        case riak_core_vnode_master:sync_command(IndexNode, {forward, Message},
-                                                 ?SERV, ?TIMEOUT) of
-            forward -> % message was forward
-                forward;
-            not_found -> % not found target
-                forward(RestPrefList, Message)
-        end
-    catch
-        {_Reason, _Where} ->
-            error
+    case riak_core_vnode_master:sync_command(IndexNode, {forward, Message},
+					     ?SERV, ?TIMEOUT) of
+	forward -> % message was forward
+	    forward;
+	not_found -> % not found target
+	    forward(RestPrefList, Message)
     end.
+
 %% forward
 -spec forward(term(), term()) -> forward | error | not_found.
 forward([], _Message) ->
     not_found;
+
 %% forward
 forward(PrefList, Message) ->
     %% send messge to one index node
@@ -153,7 +154,7 @@ forward(PrefList, Message) ->
     do_forward(IndexNode, RestPrefList, Message).
 
 %% forward_reply
-forward_reply(Id, PrefList,Message) ->
+forward_reply(Id, PrefList, Message) ->
     case forward(PrefList, Message) of
         forward ->
             {Id, 0, <<"message was forwarded">>};

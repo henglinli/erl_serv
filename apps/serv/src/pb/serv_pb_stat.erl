@@ -117,7 +117,6 @@ register_stat(Name, {function, _Module, _Function}=Fun) ->
 active_pb_connects() ->
     %% riak_api_pb_sup will not be running when there are no listeners
     %% defined.
-    case erlang:whereis(riak_api_pb_sup) of
-        undefined -> 0;
-        _ -> proplists:get_value(active, supervisor:count_children(riak_api_pb_sup))
-    end.
+    %% ToDo: should call sidejob api here
+    %% proplists:get_value(active, supervisor:count_children(riak_api_pb_sup))
+    0.
