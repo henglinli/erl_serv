@@ -31,7 +31,7 @@ start(_StartType, _StartArgs) ->
 	    ok = riak_core:register(serv, [{stat_mod, serv_pb_stat}]),
 	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},
 	    %% webmachine_router:add_route(EntryRoute),
-	    true = serv_pb_handler:register(5, serv_pb_handler_chat),
+	    true = serv_pb_handler:register(?CHAT_CODE, serv_pb_handler_chat),
 	    {ok, Pid};
 	{error, Reason} ->
 	    {error, Reason};

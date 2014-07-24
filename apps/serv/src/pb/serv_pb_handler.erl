@@ -227,9 +227,14 @@ deregister(MsgCode)
 -spec lookup(pos_integer()) -> undefined | module().
 lookup(MsgCode)
   when is_integer(MsgCode) ->
-    [{MsgCode, Handler} | _Rest] = ets:lookup(?ETS_SERV_HANDLER_NAME, MsgCode),
-    Handler.
-
+    %%    [{MsgCode, Handler} | _Rest] =
+    case ets:lookup(?ETS_SERV_HANDLER_NAME, MsgCode) of
+	[] ->
+	    undefined;
+	Result ->
+	    [{MsgCode, Handler} | _Rest] = Result,
+	    Handler
+    end.
 %% ===================================================================
 %% EUnit tests
 %% ===================================================================
