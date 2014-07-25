@@ -128,6 +128,7 @@ handle_call(Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({work, Work, WorkFrom},
             #state{module = Mod, modstate = ModState} = State) ->
+    lager:info("~p do work ~p form ~p", [Mod, Work, WorkFrom]),
     NewModState = case Mod:handle_work(Work, WorkFrom, ModState) of
                       {reply, Reply, NS} ->
                           Mod:reply(WorkFrom, Reply),

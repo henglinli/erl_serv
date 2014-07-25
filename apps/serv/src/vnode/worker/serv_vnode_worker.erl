@@ -6,7 +6,7 @@
 %%% @end
 %%% Created :  4 May 2014 by  <lee@lee>
 %%%-------------------------------------------------------------------
--module(serv_vnode_work).
+-module(serv_vnode_worker).
 -behaviour(riak_core_vnode_worker).
 
 -export([init_worker/3,
