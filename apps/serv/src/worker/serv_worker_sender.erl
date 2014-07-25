@@ -61,7 +61,7 @@ handle_work({forward,
     end;
 
 handle_work(Work, WorkFrom, WorkState) ->
-    lager:info("undefined work ~p from ~p", [Work, WorkFrom]),
+    lager:warn("undefined work ~p from ~p", [Work, WorkFrom]),
     {reply, {unkown_work, Work}, WorkState}.
 
 %% reply

@@ -53,7 +53,7 @@ init([]) ->
 
     ServWokerPoolSupSpec = {serv_worker_pool_sup,
 			    {serv_worker_pool_sup, start_link, []},
-			    Restart, Shutdown, supervisor, [serv_worker_pool_sup]},
+			    Restart, Shutdown, worker, [serv_worker_pool_sup]},
 
     ServPbSupSpec = {serv_pb_sup,
 		     {serv_pb_sup, start_link, []},
