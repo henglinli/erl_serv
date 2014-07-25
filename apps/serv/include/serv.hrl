@@ -7,11 +7,6 @@
 		  user :: binary(),
 		  token :: non_neg_integer()
 		 }).
-%% client to client message, not used.
-%% it's map version was used
--record(message, {id :: integer(),
-		  to :: binary(),
-		  msg :: term()}).
 %% riak_core nrw
 -define(N, 3).
 -define(R, 1).

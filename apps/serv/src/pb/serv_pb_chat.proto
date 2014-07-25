@@ -15,7 +15,7 @@
 // will register as 11
 // chat from other one, client should read as 16
 message chat {
-  optional bytes from = 1;  // from who, will checked by server
+  required bytes from = 1;  // from who, will checked by server
   required bytes to = 2;    // to who, maybe checked by server
   optional uint32 time = 3; // time, not be checked by server
   required bytes msg = 4;   // the message

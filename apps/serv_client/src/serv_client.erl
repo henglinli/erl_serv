@@ -26,8 +26,7 @@
         ]).
 %% test
 -export([test/1,
-         chat_one/0,
-	 login_one/0,
+         login_one/0,
          chat_test/0
         ]).
 
@@ -153,7 +152,7 @@ do_login({login, NewSelf, Password}, _From,
          #state{socket = Socket} = State) ->
     ProtobufAuth = #auth{user = NewSelf, password = Password, how = 2},
     Auth = serv_pb_base_pb:encode(ProtobufAuth),
-    case gen_tcp:send(Socket, [?AUTH_CODE, Auth]) of
+    case gen_tcp:send(Socket, [5, Auth]) of
         {error, Reason} ->
             {stop, Reason, {error, Reason}, State};
         ok ->
@@ -173,7 +172,7 @@ do_request(#request{command = chat, data = {To, Msg}}, _From,
                          time = s(os:timestamp()),
                          msg = Msg},
     Chat = serv_pb_chat_pb:encode(ProtobufChat),
-    case gen_tcp:send(Socket, [?CHAT_CODE, Chat]) of
+    case gen_tcp:send(Socket, [11, Chat]) of
         {error, Reason} ->
             {stop, Reason, {error, Reason}, State};
         ok ->
@@ -229,7 +228,7 @@ handle_sync_event(ping, _From, do_connect, State) ->
 
 handle_sync_event(ping, _From, StateName,
                   State = #state{socket = Socket}) ->
-    Ping = [?PING_CODE, <<"ping">>],%serv_pb_codec:encode(ping),
+    Ping = [1, <<"ping">>],%serv_pb_codec:encode(ping),
     case gen_tcp:send(Socket, Ping) of
         {error, Reason} ->
             {stop, Reason, {error, Reason}, State};
@@ -475,20 +474,7 @@ login_one() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
         {ok , Pid} ->
-            ok = serv_client:connect(Pid, "localhost", 8087),
-	    ok = serv_client:login(Pid, <<"lee">>),
-            {ok, Pid};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-chat_one() ->
-    application:start(serv_client),
-    case serv_client_sup:start_child() of
-        {ok , Pid} ->
-            ok = serv_client:connect(Pid, "localhost", 8087),
-	    ok = serv_client:login(Pid, <<"lee">>),
-	    ok = serv_client:chat(Pid, <<"xx">>),	  
+            ok = serv_client:connect(Pid, "localhost", 8087, <<"lee">>, <<"lee">>),
             {ok, Pid};
         {error, Reason} ->
             {error, Reason}
@@ -498,12 +484,10 @@ chat_test() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
         {ok, Pid} ->
-            ok = serv_client:connect(Pid, "localhost", 8087),
-	    ok = serv_client:login(Pid, <<"lee">>),
+            ok = serv_client:connect(Pid, "localhost", 8087, <<"lee">>, <<"lee">>),
             case serv_client_sup:start_child() of
                 {ok, Pid1} ->
-                    ok = serv_client:connect(Pid1, "localhost", 8087),
-		    ok = serv_client:login(Pid1, <<"google">>),
+                    ok = serv_client:connect(Pid1, "localhost", 8087, <<"google">>, <<"google">>),
                     ok = serv_client:chat(Pid1, <<"lee">>),
                     ok = serv_client:chat(Pid, <<"google">>),
                     ok;
