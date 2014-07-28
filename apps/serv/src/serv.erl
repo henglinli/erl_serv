@@ -13,10 +13,10 @@
 
 %% API
 -export([ping/0,
-         get_apl/3,
-         get_apl_user/2,
-         send/2
-        ]).
+	 get_apl/3,
+	 get_apl_user/2,
+	 send/1
+	]).
 
 %%%===================================================================
 %%% API
@@ -26,13 +26,13 @@
 -spec ping() -> pong | pang | term().
 ping() ->
     DocIdx = riak_core_util:chash_key({?PING,
-                                       erlang:term_to_binary(os:timestamp())}),
+				       erlang:term_to_binary(os:timestamp())}),
     case riak_core_apl:get_apl(DocIdx, 1, ?SERV) of
-        [] ->
-            pang;
-        PrefList ->
-            [IndexNode| _Rest] = PrefList,
-            riak_core_vnode_master:sync_command(IndexNode, ping, ?SERV, ?TIMEOUT)
+	[] ->
+	    pang;
+	PrefList ->
+	    [IndexNode| _Rest] = PrefList,
+	    riak_core_vnode_master:sync_command(IndexNode, ping, ?SERV, ?TIMEOUT)
     end.
 
 -spec get_apl(binary(), binary(), integer()) -> node().
@@ -45,30 +45,23 @@ get_apl_user(Name, N)
   when erlang:is_binary(Name) ->
     get_apl(?USER, Name, N).
 
--spec send(From :: term() | {pid, Pid :: pid()},
-           TheMessage :: term() |
-                         {select,
-                          User :: binary(),
-                          N :: integer()} |
-                         {forward,
-                          Id :: integer(),
-                          ToWho :: binary(),
-                          Message :: binary(),
-                          N :: integer()}) ->
-                  forword | save | {error, Reason :: term()}.
+-spec send(Work :: term() |
+		   {select,
+		    From :: pid(),
+		    User :: binary(),
+		    N :: integer()} |
+		   {forward,
+		    Message :: #message{},
+		    N :: integer()}) ->
+		  forword | save | {error, Reason :: term()}.
 %% forward message to other
-send({pid, _Pid} = From, {forward, Id, ToWho, Message, N})
-  when erlang:is_pid(From)
-       andalso erlang:is_binary(ToWho)
-       andalso erlang:is_integer(Id)
-       andalso erlang:is_binary(Message)
-       andalso erlang:is_integer(N) ->
-    %% message {froward, Message} was send by serv_send_worker
-    %% and handle by serv_vnode_work
-    serv_worker_pool:handle_work({forward, Id, ToWho, Message, N}, From);
+send({forward, #message{} = _Message, _N} = Work) ->
+%% work {froward, #message{}, N} was send by serv_send_worker
+%% and handle by serv_vnode_work
+    serv_worker_pool:handle_work(Work);
 %% select server
-send({pid, _Pid} = From, {select, User, N}) ->
-    serv_worker_pool:handle_work({select, User, N}, From);
+send({select, _From, _User, _N} = Work) ->
+    serv_worker_pool:handle_work(Work);
 %% other message
-send(From, Message) ->
-    serv_worker_pool:handle_work(Message, From).
+send(_Work) ->
+    not_impl.

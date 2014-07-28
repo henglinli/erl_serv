@@ -11,31 +11,37 @@
 -behaviour(gen_fsm).
 
 %% API
--export([start_link/0, handle_work/2]).
+-export([start_link/0, handle_work/1]).
 %% API, called by serv_worker
 -export([notify/1]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
-         handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 %% gen_fsm states
 -export([wait_worker_start/2, wait_worker_start/3,
-         ready/2, queueing/2, ready/3, queueing/3]).
+	 ready/2, queueing/2, ready/3, queueing/3]).
 
 -define(SERVER, ?MODULE).
 
 -record(state, {
-          queue = undefined :: queue:queue({work, Work :: term(), From :: term()}),
-          pool = undefined :: queue:queue({pid, Pid :: pid()})
-         }).
+	  queue = undefined :: queue:queue({work, Work :: term()}),
+	  pool = undefined :: queue:queue({pid, Pid :: pid()})
+	 }).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-handle_work(Work, From) ->
-    gen_fsm:send_event(?SERVER, {work, Work, From}).
+handle_work(Work) ->
+    gen_fsm:send_event(?SERVER, {work, Work}).
 
-notify(Info) ->
+notify({worker_start, _Pid} = Info) ->
+    gen_fsm:send_event(?SERVER, Info);
+
+notify({last_worker_start, _Pid} = Info) ->
+    gen_fsm:send_event(?SERVER, Info);
+
+notify({pid, _Pid} = Info) ->
     gen_fsm:send_event(?SERVER, Info).
 %%--------------------------------------------------------------------
 %% @doc
@@ -86,13 +92,13 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 wait_worker_start({worker_start, Pid},
-                  #state{pool=Pool} = State) ->
+		  #state{pool=Pool} = State) ->
     NewPool = queue:in({pid, Pid}, Pool),
     {next_state, wait_worker_start,
      State#state{pool=NewPool}};
 
 wait_worker_start({last_worker_start, Pid},
-                  #state{pool=Pool} = State) ->
+		  #state{pool=Pool} = State) ->
     NewPool = queue:in({pid, Pid}, Pool),
     {next_state, ready,
      State#state{pool=NewPool}}.
@@ -120,18 +126,18 @@ wait_worker_start(_Event, _From, State) ->
 ready(_Event, _From, State) ->
     {reply, not_impl, ready, State}.
 
-ready({work, Work, From} = Msg,
+ready({work, Work} = Msg,
       #state{pool=Pool, queue=Queue} = State) ->
     case queue:out(Pool) of
-        {empty, EmptyPool} ->
-            {next_state, queueing,
-             State#state{queue=queue:in(Msg, Queue),
-                         pool=EmptyPool}};
-        {{value, {pid, Pid} = Worker}, NewPool}
-          when erlang:is_pid(Pid) ->
-            serv_worker:handle_work(Worker, Work, From),
-            {next_state, ready,
-             State#state{pool=NewPool}}
+	{empty, EmptyPool} ->
+	    {next_state, queueing,
+	     State#state{queue=queue:in(Msg, Queue),
+			 pool=EmptyPool}};
+	{{value, {pid, Pid} = Worker}, NewPool}
+	  when erlang:is_pid(Pid) ->
+	    serv_worker:handle_work(Worker, Work),
+	    {next_state, ready,
+	     State#state{pool=NewPool}}
     end;
 
 ready(_Event, State) ->
@@ -140,7 +146,7 @@ ready(_Event, State) ->
 queueing(_Event, _From, State) ->
     {reply, ok, queueing, State}.
 
-queueing({work, _Work, _From} = Msg, #state{queue=Queue} = State) ->
+queueing({work, _Work} = Msg, #state{queue=Queue} = State) ->
     {next_state, queueing, State#state{queue=queue:in(Msg, Queue)}};
 
 queueing(_Event, State) ->
@@ -160,17 +166,17 @@ queueing(_Event, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_event({pid, _Pid} = Worker, _StateName,
-             #state{pool=Pool, queue=Queue} = State) ->
+	     #state{pool=Pool, queue=Queue} = State) ->
     case queue:out(Queue) of
-        {{value, {work, Work, From}}, Rem} ->
-            %% there is outstanding work to do - instead of checking
-            %% the worker back in, just hand it more work to do
-            serv_worker:handle_work(Worker, Work, From),
-            {next_state, queueing, State#state{queue=Rem}};
-        {empty, EmptyQueue} ->
-            NewPool = queue:in({pid, Worker}, Pool),
-            {next_state, ready,
-             State#state{queue=EmptyQueue, pool=NewPool}}
+	{{value, {work, Work}}, Rem} ->
+	    %% there is outstanding work to do - instead of checking
+	    %% the worker back in, just hand it more work to do
+	    serv_worker:handle_work(Worker, Work),
+	    {next_state, queueing, State#state{queue=Rem}};
+	{empty, EmptyQueue} ->
+	    NewPool = queue:in({pid, Worker}, Pool),
+	    {next_state, ready,
+	     State#state{queue=EmptyQueue, pool=NewPool}}
     end;
 
 handle_event(_Event, StateName, State) ->

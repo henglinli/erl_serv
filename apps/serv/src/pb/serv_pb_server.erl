@@ -367,7 +367,7 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
         {?SELECT_CODE, MsgData} ->
             case serv_pb_base_pb:decode(select, MsgData) of
                 #select{user = User} ->
-                    ok = serv:send({pid, erlang:self()}, {select, User, 1}),
+                    ok = serv:send({select, erlang:self(), User, 1}),
                     {next_state, wait_for_auth, State};
                 _Other ->
                     {next_state, reply_then_stop,

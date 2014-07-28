@@ -12,7 +12,7 @@
 
 -include("serv.hrl").
 %% serv_worker callback
--export([init_worker/1, handle_work/3, reply/2]).
+-export([init_worker/1, handle_work/2, reply/2]).
 
 %% API
 -export([]).
@@ -31,35 +31,39 @@ init_worker([]) ->
     {ok, #state{queue=undefined, set=undefined}}.
 
 %% handle worker
--spec handle_work(Work :: term(), WorkFrom :: term(), WorkState ::term()) ->
-    {reply, Reply :: term(), NewWorkState :: term()} |
-    {noreply, NewWorkState :: term()}.
-
+-spec handle_work(Work :: term(), WorkState ::term()) ->
+			 {reply,
+			  ToWho :: term() | {pid, Pid :: pid()},
+			  Reply :: term(),
+			  NewWorkState :: term()} |
+			 {noreply, NewWorkState :: term()}.
 %% select server
-handle_work({select, User, _N}, _WorkFrom,
+handle_work({select, From, User, _N},
 	    #state{queue=undefined, set=undefined} = WorkState) ->
     case get_apl(?MESSAGE, User, 1) of
 	[] ->
-	    {reply, {server, {1, <<"serv down">>}}, WorkState};
+	    {reply, From, {server, {1, <<"serv down">>}}, WorkState};
 	PrefList ->
 	    Servers = send_select(PrefList, []),
 	    [{server, Server} | _RestServers] = Servers,
-	    {reply, {server, {0, Server}}, WorkState}
+	    {reply, From, {server, {0, Server}}, WorkState}
     end;
 
 %% forward message
-handle_work({forward, Id, ToWho, Message, N}, _WorkFrom, WorkState) ->
+handle_work({forward, 
+	     #message{id=Id, from=From, to=ToWho, msg=_Msg} = Message,
+	     N}, WorkState) ->
     case get_apl(?MESSAGE, ToWho, N) of
 	[] ->
-	    {reply, {reply, {Id, 1, <<"serv down">>}}, WorkState};
+	    {reply, From, {reply, {Id, 1, <<"serv down">>}}, WorkState};
 	PrefList ->
-	    Reply = forward_reply(Id, PrefList, {Id, ToWho, Message}),
-	    {reply, {reply, Reply}, WorkState}
+	    Reply = forward_reply(Id, PrefList, Message),
+	    {reply, From, {reply, Reply}, WorkState}
     end;
 
-handle_work(Work, WorkFrom, WorkState) ->
-    lager:debug("work ~p from ~p", [Work, WorkFrom]),
-    {reply, {unkown_work, Work}, WorkState}.
+handle_work(Work, WorkState) ->
+    lager:warn("unkonw work ~p", [Work]),
+    {noreply, WorkState}.
 
 %% reply
 -spec reply(WorkFrom :: term() | {pid, Pid :: pid()}, Reply :: term()) ->
@@ -70,14 +74,14 @@ reply(WorkFrom, {unkown_work, Work}) ->
     WorkFrom ! {unkown_work , Work};
 
 %% select
-reply({pid, _Pid} = WorkFrom, {server, _Server} = Message) ->
-    serv_pb_server:sync_send(WorkFrom, Message);
+reply(WorkFrom, {server, _Server} = Message) ->
+    serv_pb_server:sync_send({pid, WorkFrom}, Message);
 %% message will reply to serv_pb_server
-reply({pid, _Pid} = WorkFrom, {reply, _Reply} = Message) ->
-    serv_pb_server:sync_send(WorkFrom, Message);
+reply(WorkFrom, {reply, _Reply} = Message) ->
+    serv_pb_server:sync_send({pid, WorkFrom}, Message);
 
 reply(_WorkFrom, _Reply) ->
-    lager:info("not impl", []),
+    lager:warn("not impl", []),
     {error, not_impl}.
 %%--------------------------------------------------------------------
 %% @doc

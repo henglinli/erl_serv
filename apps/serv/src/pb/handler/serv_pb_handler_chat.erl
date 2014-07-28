@@ -22,23 +22,18 @@
     {noreply, NewState :: term()}.
 
 handle(Chat, undefined) ->
-    Ok = #response{errcode = 0, errmsg = <<"OK">>},
-    EncodedOk = serv_pb_base_pb:encode(Ok),
     case serv_pb_chat_pb:decode(chat, Chat) of
 	%% ToDo: check from is self
-        #chat{from = Self, to = To} ->
+	%% ToDo: check To is valid(is Who can send mesasge to)
+        #chat{from = _Self, to = To} ->
             lager:info("chat to ~p", [To]),
-            case To of
-                Self ->
-                    {reply, [?RESPONSE_CODE, EncodedOk], undefined};
-                _To ->
-                    %% send [mesasge] to server
-                    ok = serv:send({pid, erlang:self()}, {forward, 1, To, Chat, ?N}),
-                    EncodedChatId = encode_chat_id(1),
-                    %% reply [message id] to client
-                    %% after [message] was sent, reply message was sent
-                    {reply, [?CHAT_ID_CODE, EncodedChatId], #state{last_id=1}}
-            end;
+	    %% send [mesasge] to server
+	    Message = #message{id=1, from=erlang:self(), to=To, msg=Chat},
+	    ok = serv:send({forward, Message, ?N}),
+	    EncodedChatId = encode_chat_id(1),
+	    %% reply [message id] to client
+	    %% after [message] was sent, reply message was sent
+	    {reply, [?CHAT_ID_CODE, EncodedChatId], #state{last_id=1}};
         _Other ->
             Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},
             EncodedError = serv_pb_base_pb:encode(Error),
@@ -46,23 +41,17 @@ handle(Chat, undefined) ->
     end;
 
 handle(Chat, #state{last_id = LastId} = State) ->
-    Ok = #response{errcode = 0, errmsg = <<"OK">>},
-    EncodedOk = serv_pb_base_pb:encode(Ok),
     case serv_pb_chat_pb:decode(chat, Chat) of
-        #chat{from = Self, to = To} ->
+        #chat{from = _Self, to = To} ->
             lager:info("chat to ~p", [To]),
-            case To of
-                Self ->
-                    {reply, [?RESPONSE_CODE, EncodedOk], State};
-                _To ->
-                    %% send [mesasge] to server
-                    Id = LastId + 1,
-                    ok = serv:send(erlang:self(), {forward, Id, To, Chat, ?N}),
-                    EncodedChatId = encode_chat_id(Id),
-                    %% reply [message id] to client
-                    %% after [message] was sent, reply message was sent
-                    {reply, [?CHAT_ID_CODE, EncodedChatId], #state{last_id=Id}}
-            end;
+	    %% send [mesasge] to server
+	    Id = LastId + 1,
+	    Message = #message{id=1, from=erlang:self(), to=To, msg=Chat},
+	    ok = serv:send({forward, Message, ?N}),
+	    EncodedChatId = encode_chat_id(Id),
+	    %% reply [message id] to client
+	    %% after [message] was sent, reply message was sent
+	    {reply, [?CHAT_ID_CODE, EncodedChatId], #state{last_id=Id}};
         _Other ->
             Error = #response{errcode = 4, errmsg = <<"serv_pb_chat_pb:decode/2">>},
             EncodedError = serv_pb_base_pb:encode(Error),
