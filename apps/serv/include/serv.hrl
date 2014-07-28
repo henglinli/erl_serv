@@ -7,6 +7,14 @@
 		  user :: binary(),
 		  token :: non_neg_integer()
 		 }).
+
+%% message
+-record(message, {id :: integer(), %% message id
+		  from :: pid(), %% send from which pid
+		  to :: binary(), %% to which user
+		  msg :: term() %% message data
+		 }).
+
 %% riak_core nrw
 -define(N, 3).
 -define(R, 1).

@@ -21,15 +21,18 @@
 
 -record(state, {server :: binary(), partition}).
 
+%%-define(USE_POOL, true).
+
 %% API
 start_vnode(I) ->
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
 
 -ifdef(USE_POOL).
 init([Partition]) ->
-    WorkerPoolSize = app_helper:get_env(serv, worker_pool_size, 10),
-    WorkerPool = {pool, serv_work, WorkerPoolSize, []},
-    {ok, #state{partition = Partition}, [WorkerPool]}.
+    WorkerPoolSize = app_helper:get_env(serv, worker_pool_size, 8),
+    WorkerPool = {pool, serv_vnode_worker, WorkerPoolSize, []},
+    {ok, #state{partition = Partition, server=get_host()}, 
+     [WorkerPool]}.
 -else.
 init([Partition]) ->
     {ok, #state{partition = Partition, server=get_host()}}.

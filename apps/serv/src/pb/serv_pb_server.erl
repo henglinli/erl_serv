@@ -57,18 +57,13 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | ignore | {error, term()}.
 start_link() ->
-    case erlang:whereis(serv_pb_server_sj) of
-        undefined ->
-            gen_fsm:start_link(?MODULE, [], []);
-        _SideJob ->
-            case sidejob_supervisor:start_child(serv_pb_server_sj,
-                                                gen_fsm, start_link,
-                                                [?MODULE, [], []]) of
-                {error, Reason} ->
-                    {error, Reason};
-                {ok, Pid} ->
-                    {ok, Pid}
-            end
+    case sidejob_supervisor:start_child(serv_pb_server_sj,
+					gen_fsm, start_link,
+					[?MODULE, [], []]) of
+	{error, Reason} ->
+	    {error, Reason};
+	{ok, Pid} ->
+	    {ok, Pid}
     end.
 %% @doc Sets the socket to service for this server.
 -spec set_socket(pid(), port()) -> ok.

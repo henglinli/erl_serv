@@ -25,6 +25,7 @@ handle(Chat, undefined) ->
     Ok = #response{errcode = 0, errmsg = <<"OK">>},
     EncodedOk = serv_pb_base_pb:encode(Ok),
     case serv_pb_chat_pb:decode(chat, Chat) of
+	%% ToDo: check from is self
         #chat{from = Self, to = To} ->
             lager:info("chat to ~p", [To]),
             case To of

@@ -19,7 +19,7 @@
 
 %% servers tail was last, head was oldest
 -record(state, {queue :: queue:queue(binary()),
-                set :: gb_sets:set(binary())}).
+		set :: gb_sets:set(binary())}).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -37,24 +37,24 @@ init_worker([]) ->
 
 %% select server
 handle_work({select, User, _N}, _WorkFrom,
-            #state{queue=undefined, set=undefined} = WorkState) ->
+	    #state{queue=undefined, set=undefined} = WorkState) ->
     case get_apl(?MESSAGE, User, 1) of
-        [] ->
-            {reply, {server, {1, <<"serv down">>}}, WorkState};
-        PrefList ->
-            Servers = send_select(PrefList, []),
-            [{server, Server} | _RestServers] = Servers,
-            {reply, {server, {0, Server}}, WorkState}
+	[] ->
+	    {reply, {server, {1, <<"serv down">>}}, WorkState};
+	PrefList ->
+	    Servers = send_select(PrefList, []),
+	    [{server, Server} | _RestServers] = Servers,
+	    {reply, {server, {0, Server}}, WorkState}
     end;
 
 %% forward message
 handle_work({forward, Id, ToWho, Message, N}, _WorkFrom, WorkState) ->
     case get_apl(?MESSAGE, ToWho, N) of
-        [] ->
-            {reply, {reply, {Id, 1, <<"serv down">>}}, WorkState};
-        PrefList ->
-            Reply = forward_reply(Id, PrefList, {Id, ToWho, Message}),
-            {reply, {reply, Reply}, WorkState}
+	[] ->
+	    {reply, {reply, {Id, 1, <<"serv down">>}}, WorkState};
+	PrefList ->
+	    Reply = forward_reply(Id, PrefList, {Id, ToWho, Message}),
+	    {reply, {reply, Reply}, WorkState}
     end;
 
 handle_work(Work, WorkFrom, WorkState) ->
@@ -63,7 +63,7 @@ handle_work(Work, WorkFrom, WorkState) ->
 
 %% reply
 -spec reply(WorkFrom :: term() | {pid, Pid :: pid()}, Reply :: term()) ->
-                   ok | {error, Reason :: term()}.
+		   ok | {error, Reason :: term()}.
 %% this function is test only,
 %% and never used in producntion .
 reply(WorkFrom, {unkown_work, Work}) ->
@@ -111,54 +111,44 @@ get_apl(Bucket, Key, N)
 %% send select, and get server list
 send_select(IndexNode, [], Servers) ->
     {ok, Server} = riak_core_vnode_master:sync_command(IndexNode, select,
-                                                       ?SERV, ?TIMEOUT),
+						       ?SERV, ?TIMEOUT),
     lists:append(Servers, [{server, Server}]);
 
 send_select(IndexNode, PrefList, []) ->
     {ok, Server} = riak_core_vnode_master:sync_command(IndexNode, select,
-                                                       ?SERV, ?TIMEOUT),
+						       ?SERV, ?TIMEOUT),
     send_select(PrefList, [{server, Server}]);
 
 send_select(IndexNode, PrefList, Servers) ->
     {ok, Server} = riak_core_vnode_master:sync_command(IndexNode, select,
-                                                       ?SERV, ?TIMEOUT),
+						       ?SERV, ?TIMEOUT),
     send_select(PrefList, lists:append(Servers, [{server, Server}])).
 
 send_select(PrefList, Servers) ->
     [IndexNode | RestPrefList] = PrefList,
     send_select(IndexNode, RestPrefList, Servers).
 
-%% do_forward
-do_forward(IndexNode, RestPrefList, Message) ->
-    try
-        case riak_core_vnode_master:sync_command(IndexNode, {forward, Message},
-                                                 ?SERV, ?TIMEOUT) of
-            forward -> % message was forward
-                forward;
-            not_found -> % not found target
-                forward(RestPrefList, Message)
-        end
-    catch
-        {_Reason, _Where} ->
-            error
-    end.
 %% forward
--spec forward(term(), term()) -> forward | error | not_found.
-forward([], _Message) ->
+-spec forward(term(), term(), not_found | forward) ->
+		     forward | error | not_found.
+forward([], _Message, _Result) ->
     not_found;
-%% forward
-forward(PrefList, Message) ->
+forward(_PrefList, _Message, forward) ->
+    forward;
+forward(PrefList, Message, not_found) ->
     %% send messge to one index node
     [IndexNode| RestPrefList] = PrefList,
-    do_forward(IndexNode, RestPrefList, Message).
+    Result = riak_core_vnode_master:sync_command(IndexNode, {forward, Message},
+						 ?SERV, ?TIMEOUT),
+    forward(RestPrefList, Message, Result).
 
 %% forward_reply
 forward_reply(Id, PrefList,Message) ->
-    case forward(PrefList, Message) of
-        forward ->
-            {Id, 0, <<"message was forwarded">>};
-        error ->
-            {Id, 2, <<"serv internal error">>};
-        not_found ->
-            {Id, 3, <<"message was not handle">>}
+    case forward(PrefList, Message, not_found) of
+	forward ->
+	    {Id, 0, <<"message was forwarded">>};
+	error ->
+	    {Id, 2, <<"serv internal error">>};
+	not_found ->
+	    {Id, 3, <<"message was not handle">>}
     end.
