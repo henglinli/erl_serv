@@ -19,33 +19,37 @@
 %% API
 -export([start_link/0, stop/1]).
 -export([connect/3, connect/1, connect/2,
-         select/2,
-         login/3, login/1, login/2,
-         ping/1,
-         chat/3, chat/2
-        ]).
+	 select/2,
+	 login/3, login/1, login/2,
+	 ping/1,
+	 chat/3, chat/2
+	]).
 %% test
 -export([test/1,
 	 chat_one/0,
-         login_one/0,
-         chat_test/0
-        ]).
+	 login_one/0,
+	 chat_test/0
+	]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
-         handle_sync_event/4, handle_info/3,
-         terminate/3, code_change/4]).
+	 handle_sync_event/4, handle_info/3,
+	 terminate/3, code_change/4]).
 
 -export([do_connect/2, do_connect/3,
-         do_login/2, do_login/3,
-         do_request/2, do_request/3]).
+	 do_login/2, do_login/3,
+	 do_request/2, do_request/3]).
 
--record(state, {socket = undefined :: undefined | gen_tcp:socket(),
-                self = <<>> :: binary(),
-                password = <<>> :: binary()}).
+-record(state, {socket = undefined :: gen_tcp:socket(),
+		self = <<>> :: binary(),
+		password = <<>> :: binary(),
+		clients = 100 :: binary(),
+		seed
+	       }).
 
--record(request, {command = undefined ::atom(),
-                  data = <<>> ::binary()}).
+-record(request, {command = undefined :: atom(),
+		  data = <<>> :: binary()
+		 }).
 
 %%%===================================================================
 %%% API
@@ -81,7 +85,8 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, do_connect, #state{}}.
+    S = crypto:rand_bytes(32),
+    {ok, do_connect, #state{seed=S}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -121,15 +126,15 @@ do_connect(_Event, State) ->
 %%--------------------------------------------------------------------
 do_connect({connect, Host, Port}, _From, State) ->
     case gen_tcp:connect(Host, Port,
-                         [{send_timeout, ?TIMEOUT},
-                          {mode, binary},
-                          {active, true},
-                          {packet, 2}
-                         ]) of
-        {error, Reason} ->
-            {stop, Reason, {error, Reason}, State};
-        {ok, Socket} ->
-            {reply, ok, do_login, State#state{socket = Socket}}
+			 [{send_timeout, ?TIMEOUT},
+			  {mode, binary},
+			  {active, true},
+			  {packet, 2}
+			 ]) of
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	{ok, Socket} ->
+	    {reply, ok, do_login, State#state{socket = Socket}}
     end;
 
 do_connect(_Event, _From, State) ->
@@ -143,41 +148,78 @@ do_login({select, User}, _From, #state{socket = Socket} = State) ->
     ProtobufSelect = #select{user=User},
     Select = serv_pb_base_pb:encode(ProtobufSelect),
     case gen_tcp:send(Socket, [?SELECT_CODE, Select]) of
-        {error, Reason} ->
-            {stop, Reason, {error, Reason}, State};
-        ok ->
-            {reply, ok, do_login, State#state{self = User}}
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	ok ->
+	    {reply, ok, do_login, State#state{self = User}}
     end;
 
 do_login({login, NewSelf, Password}, _From,
-         #state{socket = Socket} = State) ->
+	 #state{socket = Socket} = State) ->
     ProtobufAuth = #auth{user = NewSelf, password = Password, how = 2},
     Auth = serv_pb_base_pb:encode(ProtobufAuth),
     case gen_tcp:send(Socket, [?AUTH_CODE, Auth]) of
-        {error, Reason} ->
-            {stop, Reason, {error, Reason}, State};
-        ok ->
-            {reply, ok, do_request, State#state{self = NewSelf}}
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	ok ->
+	    {reply, ok, do_request, State#state{self = NewSelf}}
     end;
 
 do_login(_Event, _From, State) ->
     {reply, unknown_message, do_login, State}.
 
 %% do request
-do_request(_Event, State) ->
-    {next_state, do_request, State}.
-
-do_request(#request{command = chat, data = {To, Msg}}, _From,
-           #state{socket = Socket, self = Self} = State) ->
+do_request(timeout,
+	   #state{socket=Socket, 
+		  self=Self, 
+		  clients=N,
+		  seed=_S}=State) ->
+    Which = crypto:rand_uniform(0, N),
+    Id = erlang:integer_to_binary(Which),
+    To = <<"lee@", Id/binary>>,
+    Msg = <<"random hello!">>,
     ProtobufChat = #chat{from = Self, to = To,
-                         time = s(os:timestamp()),
-                         msg = Msg},
+			 time = s(os:timestamp()),
+			 msg = Msg},
     Chat = serv_pb_chat_pb:encode(ProtobufChat),
     case gen_tcp:send(Socket, [?CHAT_CODE, Chat]) of
-        {error, Reason} ->
-            {stop, Reason, {error, Reason}, State};
-        ok ->
-            {reply, ok, do_request, State}
+	{error, Reason} ->
+	    {stop, Reason, State};
+	ok ->
+	    {next_state, do_request, State}
+    end;
+
+do_request(_Event, State) ->
+    {next_state, do_request, State, 5}.
+
+do_request(#request{command=chat_random,data=N}, _From,
+	   #state{socket=Socket, self=Self, seed=_S}=State) ->
+    Which = crypto:rand_uniform(0, N),
+    Id = erlang:integer_to_binary(Which),
+    To = <<"lee@", Id/binary>>,
+    Msg = <<"random hello!">>,
+    ProtobufChat = #chat{from = Self, to = To,
+			 time = s(os:timestamp()),
+			 msg = Msg},
+    Chat = serv_pb_chat_pb:encode(ProtobufChat),
+    case gen_tcp:send(Socket, [?CHAT_CODE, Chat]) of
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	ok ->
+	    {reply, ok, do_request, State#state{clients=N}}
+    end;
+
+do_request(#request{command = chat, data = {To, Msg}}, _From,
+	   #state{socket = Socket, self = Self} = State) ->
+    ProtobufChat = #chat{from = Self, to = To,
+			 time = s(os:timestamp()),
+			 msg = Msg},
+    Chat = serv_pb_chat_pb:encode(ProtobufChat),
+    case gen_tcp:send(Socket, [?CHAT_CODE, Chat]) of
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	ok ->
+	    {reply, ok, do_request, State}
     end;
 
 do_request(_Event, _From, State) ->
@@ -228,13 +270,13 @@ handle_sync_event(ping, _From, do_connect, State) ->
     {reply, not_connected, do_connect, State};
 
 handle_sync_event(ping, _From, StateName,
-                  State = #state{socket = Socket}) ->
+		  State = #state{socket = Socket}) ->
     Ping = [?PING_CODE, <<"ping">>], %serv_pb_codec:encode(ping),
     case gen_tcp:send(Socket, Ping) of
-        {error, Reason} ->
-            {stop, Reason, {error, Reason}, State};
-        ok ->
-            {reply, ok, StateName, State}
+	{error, Reason} ->
+	    {stop, Reason, {error, Reason}, State};
+	ok ->
+	    {reply, ok, StateName, State}
     end;
 
 handle_sync_event(stop, _From, _StateName, State) ->
@@ -266,33 +308,33 @@ handle_info({tcp_error, _Socket, Reason}, _StateName, State) ->
 
 handle_info({tcp, Socket, Data}, StateName, State) ->
     case handle_packet(Data) of
-        noreply ->
-            {next_state, StateName, State};
-        {address, Ip} ->
-            Address = erlang:binary_to_list(Ip),
-            case inet:parse_address(Address) of
-                {ok, IPAddress} ->
-                    case inet:peername(Socket) of
-                        {ok, {IPAddress, _Port}} ->
-                            {next_state, StateName, State};
-                        {ok, _} ->
-                            lager:info("please reconnect to ~p", [Ip]),
-                            {stop, normal, State};
-                        {error, Reason} ->
-                            {stop, Reason, State}
-                    end;
-                {error, einval} ->
-                    {stop, einval, State}
-            end;
-        {stop, ErrMsg} ->
-            {stop, ErrMsg, State};
-        {reply, Reply} ->
-            case gen_tcp:send(Socket, Reply) of
-                {error, Reason} ->
-                    {stop, Reason, State};
-                ok ->
-                    {next_state, StateName, State}
-            end
+	noreply ->
+	    {next_state, StateName, State};
+	{address, Ip} ->
+	    Address = erlang:binary_to_list(Ip),
+	    case inet:parse_address(Address) of
+		{ok, IPAddress} ->
+		    case inet:peername(Socket) of
+			{ok, {IPAddress, _Port}} ->
+			    {next_state, StateName, State};
+			{ok, _} ->
+			    lager:info("please reconnect to ~p", [Ip]),
+			    {stop, normal, State};
+			{error, Reason} ->
+			    {stop, Reason, State}
+		    end;
+		{error, einval} ->
+		    {stop, einval, State}
+	    end;
+	{stop, ErrMsg} ->
+	    {stop, ErrMsg, State};
+	{reply, Reply} ->
+	    case gen_tcp:send(Socket, Reply) of
+		{error, Reason} ->
+		    {stop, Reason, State};
+		ok ->
+		    {next_state, StateName, State}
+	    end
     end;
 
 handle_info(_Info, StateName, State) ->
@@ -310,14 +352,12 @@ handle_info(_Info, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName,
-          #state{socket = undefined}) ->
-    lager:info("Bye!", []),
+	  #state{socket = undefined}) ->
     ok;
 
 terminate(_Reason, _StateName,
-          #state{socket = Socket}) ->
+	  #state{socket = Socket}) ->
     gen_tcp:close(Socket),
-    lager:info("Bye!", []),
     ok.
 
 %%--------------------------------------------------------------------
@@ -336,52 +376,52 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 -spec handle_packet(Packet::binary()) ->
-                           noreply | {address | stop | reply, binary()}.
+			   noreply | {address | stop | reply, binary()}.
 handle_packet(Packet) ->
     case parse_packat(Packet) of
-        undefined ->
-            lager:info("recved: [~p]", [Packet]),
-            noreply;
-        {?RESPONSE_CODE, MsgData} ->
-            #response{errcode = ErrCode, errmsg = ErrMsg}
-                = serv_pb_base_pb:decode(response, MsgData),
-            lager:info("recved: {~p, ~p}", [ErrCode, ErrMsg]),
-            noreply;
-        {?SERVER_CODE, MsgData} ->
-            #server{errcode=ErrCode, errmsg=ErrMsg, ip=Ip}
-                = serv_pb_base_pb:decode(server, MsgData),
-            case ErrCode of
-                0 ->
-                    {address, Ip};
-                _Else ->
-                    lager:info("select server error: {~p, ~p}", [ErrCode, ErrMsg]),
-                    {stop, ErrMsg}
-            end;
-        {?CHAT_ID_CODE, MsgData} ->
-            #chat_id{id = Id}
-                = serv_pb_chat_pb:decode(chat_id, MsgData),
-            lager:info("chat_id: ~p", [Id]),
-            noreply;
-        {?REPLY_CODE, MsgData} ->
-            #reply{id = Id, errcode = ErrCode, errmsg = ErrMsg}
-                = serv_pb_chat_pb:decode(reply, MsgData),
-            lager:info("chat_id: ~p -> {~p, ~p}", [Id, ErrCode, ErrMsg]),
-            noreply;
-        {?SERVER_CHAT_CODE, MsgData} ->
-            #chat{from = From, to = To, msg = Msg, time = Time}
-                = serv_pb_chat_pb:decode(chat, MsgData),
-            lager:info("{~p, ~p, ~p, ~p}", [Time, From, To, Msg]),
-            noreply;
-        {MsgCode, MsgData} ->
-            %Response = serv_pb_codec:decode(MsgCode, MsgData),
-            lager:info("recved: [~p: ~p]", [MsgCode, MsgData]),
-            noreply
+	undefined ->
+	    lager:info("recved: [~p]", [Packet]),
+	    noreply;
+	{?RESPONSE_CODE, MsgData} ->
+	    #response{errcode = ErrCode, errmsg = ErrMsg}
+		= serv_pb_base_pb:decode(response, MsgData),
+	    lager:info("recved: {~p, ~p}", [ErrCode, ErrMsg]),
+	    noreply;
+	{?SERVER_CODE, MsgData} ->
+	    #server{errcode=ErrCode, errmsg=ErrMsg, ip=Ip}
+		= serv_pb_base_pb:decode(server, MsgData),
+	    case ErrCode of
+		0 ->
+		    {address, Ip};
+		_Else ->
+		    lager:info("select server error: {~p, ~p}", [ErrCode, ErrMsg]),
+		    {stop, ErrMsg}
+	    end;
+	{?CHAT_ID_CODE, MsgData} ->
+	    #chat_id{id = Id}
+		= serv_pb_chat_pb:decode(chat_id, MsgData),
+	    lager:info("chat_id: ~p", [Id]),
+	    noreply;
+	{?REPLY_CODE, MsgData} ->
+	    #reply{id = Id, errcode = ErrCode, errmsg = ErrMsg}
+		= serv_pb_chat_pb:decode(reply, MsgData),
+	    lager:info("chat_id: ~p -> {~p, ~p}", [Id, ErrCode, ErrMsg]),
+	    noreply;
+	{?SERVER_CHAT_CODE, MsgData} ->
+	    #chat{from = From, to = To, msg = Msg, time = Time}
+		= serv_pb_chat_pb:decode(chat, MsgData),
+	    lager:info("chat got {~p, ~p, ~p, ~p}", [Time, From, To, Msg]),
+	    noreply;
+	{MsgCode, MsgData} ->
+	    %Response = serv_pb_codec:decode(MsgCode, MsgData),
+	    lager:info("recved: [~p: ~p]", [MsgCode, MsgData]),
+	    noreply
     end.
 
 -spec parse_packat(Packet::binary()) ->
-                         undefined | {MsgCode::integer(), MsgData::binary()}.
+			 undefined | {MsgCode::integer(), MsgData::binary()}.
 parse_packat(<<MsgCode:8/big-unsigned-integer,
-                       MsgData/binary>>) ->
+		       MsgData/binary>>) ->
     {MsgCode, MsgData};
 
 parse_packat(_) ->
@@ -393,7 +433,7 @@ stop(Pid) ->
 
 %% connect
 -spec connect(pid(), inet:ip_address() | inet:hostname(), inet:port_number()) ->
-                     ok | {error, inet:posix()}.
+		     ok | {error, inet:posix()}.
 connect(Pid, Host, Port) ->
     gen_fsm:sync_send_event(Pid, {connect, Host, Port}).
 
@@ -405,13 +445,13 @@ connect(Pid) ->
 
 %%
 -spec select(Pid :: pid(), Self :: binary()) ->
-                    ok | {error, term()}.
+		    ok | {error, term()}.
 select(Pid, Self) ->
     gen_fsm:sync_send_event(Pid, {select, Self}).
 
 %% login
 -spec login(Pid :: pid(), Self :: binary(), Pasword :: binary()) ->
-                   ok | {error, term()}.
+		   ok | {error, term()}.
 login(Pid, Self, Pasword) ->
     gen_fsm:sync_send_event(Pid, {login, Self, Pasword}).
 
@@ -431,11 +471,16 @@ ping(Pid) ->
 chat(Pid, To, Msg) ->
     Chat = {To, Msg},
     gen_fsm:sync_send_event(Pid, #request{command = chat,
-                                          data = Chat}).
+					  data = Chat}).
 
-chat(Pid, To) ->
-    chat(Pid, To, <<"hello!">>).
+chat(Pid, To)
+  when erlang:is_binary(To) ->
+    chat(Pid, To, <<"hello!">>);
 
+chat(Pid, N)
+  when erlang:is_integer(N) ->
+    gen_fsm:sync_send_event(Pid, #request{command=chat_random,
+					  data=N}).
 %% -spec ms(erlang:timestamp()) -> pos_integer().
 %% ms({MegaSecs, Secs, MicroSecs}) ->
 %%     MegaSecs*100000000 + Secs*1000 + MicroSecs.
@@ -447,69 +492,71 @@ s({MegaSecs, Secs, _MicroSecs}) ->
 %%
 -spec test(Clients :: pos_integer()) -> term().
 test(Clients) ->
-    test_helper(Clients, ok).
+    application:start(serv_client),
+    test_helper(Clients, Clients, ok).
 
-test_helper(0, ok) ->
+test_helper(_Clients, 0, ok) ->
     ok;
 
-test_helper(_N, error) ->
+test_helper(_Clients, _Which, error) ->
     error;
 
-test_helper(N, ok) ->
-    Result = do_test(N),
-    test_helper(N - 1, Result).
+test_helper(Clients, Which, ok) ->
+    Result = do_test(Clients, Which),
+    test_helper(Clients, Which-1, Result).
 
-do_test(N) ->
-    Id = erlang:integer_to_binary(N),
+do_test(Clients, Which) ->
+    Id = erlang:integer_to_binary(Which),
     User = <<"lee@", Id/binary>>,
     case serv_client_sup:start_child() of
-        {ok , Pid} ->
-            serv_client:connect(Pid),
-            serv_client:login(Pid, User),
-            ok;
-        {error, _Reason} ->
-            error
+	{ok , Pid} ->
+	    serv_client:connect(Pid),
+	    serv_client:login(Pid, User),
+	    serv_client:chat(Pid, Clients),
+	    ok;
+	{error, _Reason} ->
+	    error
     end.
 
 login_one() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
-        {ok , Pid} ->
-            ok = serv_client:connect(Pid, "localhost", 8087),
+	{ok , Pid} ->
+	    ok = serv_client:connect(Pid, "localhost", 8087),
 	    ok = serv_client:login(Pid, <<"lee">>),
-            {ok, Pid};
-        {error, Reason} ->
-            {error, Reason}
+	    {ok, Pid};
+	{error, Reason} ->
+	    {error, Reason}
     end.
 
 chat_one() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
-        {ok , Pid} ->
-            ok = serv_client:connect(Pid, "localhost", 8087),
+	{ok , Pid} ->
+	    ok = serv_client:connect(Pid, "localhost", 8087),
 	    ok = serv_client:login(Pid, <<"lee">>),
 	    ok = serv_client:chat(Pid, <<"google">>),
-            {ok, Pid};
-        {error, Reason} ->
-            {error, Reason}
+	    {ok, Pid};
+	{error, Reason} ->
+	    {error, Reason}
     end.
 
 chat_test() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
-        {ok, Pid} ->
-            ok = serv_client:connect(Pid, "localhost", 8087),
+	{ok, Pid} ->
+	    ok = serv_client:connect(Pid, "localhost", 8087),
 	    ok = serv_client:login(Pid, <<"lee">>),
-            case serv_client_sup:start_child() of
-                {ok, Pid1} ->
-                    ok = serv_client:connect(Pid1, "localhost", 8087),
+	    case serv_client_sup:start_child() of
+		{ok, Pid1} ->
+		    ok = serv_client:connect(Pid1, "localhost", 8087),
 		    ok = serv_client:login(Pid1, <<"google">>),
-                    ok = serv_client:chat(Pid1, <<"lee">>),
-                    ok = serv_client:chat(Pid, <<"google">>),
-                    ok;
-                {error, _Reason} ->
-                    error
-            end;
-        {error, _Reason} ->
-            error
+		    ok = serv_client:chat(Pid1, <<"lee">>),
+		    ok = serv_client:chat(Pid, <<"google">>),
+		    ok;
+		{error, _Reason} ->
+		    error
+	    end;
+	{error, _Reason} ->
+	    error
     end.
