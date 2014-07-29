@@ -50,7 +50,7 @@ handle_work({select, From, User, _N},
     end;
 
 %% forward message
-handle_work({forward, 
+handle_work({forward,
 	     #message{id=Id, from=From, to=ToWho, msg=_Msg} = Message,
 	     N}, WorkState) ->
     case get_apl(?MESSAGE, ToWho, N) of
@@ -82,7 +82,7 @@ reply(WorkFrom, {reply, _Reply} = Message) ->
 
 reply(_WorkFrom, _Reply) ->
     lager:warn("not impl", []),
-    {error, not_impl}.
+    {error, <<"not impl">>}.
 %%--------------------------------------------------------------------
 %% @doc
 %% @spec
@@ -109,7 +109,6 @@ get_apl(Bucket, Key, N)
 %%		E ->
 %%                  queue:
 %%                  {ok, E,
-
 %%     end.
 
 %% send select, and get server list
@@ -137,8 +136,10 @@ send_select(PrefList, Servers) ->
 		     forward | error | not_found.
 forward([], _Message, _Result) ->
     not_found;
+
 forward(_PrefList, _Message, forward) ->
     forward;
+
 forward(PrefList, Message, not_found) ->
     %% send messge to one index node
     [IndexNode| RestPrefList] = PrefList,
@@ -147,7 +148,7 @@ forward(PrefList, Message, not_found) ->
     forward(RestPrefList, Message, Result).
 
 %% forward_reply
-forward_reply(Id, PrefList,Message) ->
+forward_reply(Id, PrefList, Message) ->
     case forward(PrefList, Message, not_found) of
 	forward ->
 	    {Id, 0, <<"message was forwarded">>};

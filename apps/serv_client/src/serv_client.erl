@@ -502,8 +502,8 @@ chat_test() ->
 	    ok = serv_client:login(Pid, <<"lee">>),
             case serv_client_sup:start_child() of
                 {ok, Pid1} ->
-                    ok = serv_client:connect(Pid1, "localhost"),
-		    ok = serv_client:login(Pid, <<"google">>),
+                    ok = serv_client:connect(Pid1, "localhost", 8087),
+		    ok = serv_client:login(Pid1, <<"google">>),
                     ok = serv_client:chat(Pid1, <<"lee">>),
                     ok = serv_client:chat(Pid, <<"google">>),
                     ok;

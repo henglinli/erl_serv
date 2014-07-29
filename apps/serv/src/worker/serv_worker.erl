@@ -118,7 +118,7 @@ init([Module,  WorkerArgs, last]) ->
 %%--------------------------------------------------------------------
 handle_call(Request, _From, State) ->
     lager:debug("serv_worker received synchronous Reuest: ~p.", [Request]),
-    {reply, not_impl, State}.
+    {reply, {error, <<"not impl">>}, State}.
 
 %%--------------------------------------------------------------------
 %% @private

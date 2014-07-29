@@ -121,10 +121,10 @@ wait_worker_start({last_worker_start, Pid},
 %% @end
 %%--------------------------------------------------------------------
 wait_worker_start(_Event, _From, State) ->
-    {reply, not_impl, ready, State}.
+    {reply, {error, <<"not impl">>}, ready, State}.
 
 ready(_Event, _From, State) ->
-    {reply, not_impl, ready, State}.
+    {reply, {error, <<"not impl">>}, ready, State}.
 
 ready({work, Work} = Msg,
       #state{pool=Pool, queue=Queue} = State) ->
@@ -199,8 +199,7 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event(_Event, _From, StateName, State) ->
-    Reply = not_impl,
-    {reply, Reply, StateName, State}.
+    {reply, {error, <<"not impl">>}, StateName, State}.
 
 %%--------------------------------------------------------------------
 %% @private

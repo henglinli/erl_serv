@@ -70,12 +70,17 @@ init([]) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    Session = ?CHILD(serv_pb_session, worker),
-
     Handler = ?CHILD(serv_pb_handler, worker),
 
     Listener = pb_listener_specs(serv_pb_listener:get_listeners()),
-    {ok, {SupFlags, [Session, Handler, Listener]}}.
+    
+    case app_helper:get_env(serv, session_type, riak_core) of
+	riak_core ->
+	    {ok, {SupFlags, [Handler, Listener]}};
+	_Else ->
+	    Session = ?CHILD(serv_pb_session, worker),
+	    {ok, {SupFlags, [Session, Handler, Listener]}}
+    end.
 
 %%%===================================================================
 %%% Internal functions

@@ -18,6 +18,8 @@
 	 send/1
 	]).
 
+-export([register/1,
+	 deregister/1]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -64,4 +66,31 @@ send({select, _From, _User, _N} = Work) ->
     serv_worker_pool:handle_work(Work);
 %% other message
 send(_Work) ->
-    not_impl.
+    {error, <<"not impl">>}.
+
+-spec register(#session{}) -> ok | {error, term()}.
+register(#session{user=User}=Session) ->
+    case get_apl(?MESSAGE, User, 1) of
+	[] ->
+	    {error, <<"serv down">>};
+	PrefList ->
+	    [IndexNode| _RestPrefList] = PrefList,
+	    riak_core_vnode_master:sync_command(IndexNode, {register, Session},
+						?SERV, ?TIMEOUT)
+    end;
+%%
+register(_) ->
+    {error, <<"not impl">>}.
+%%
+-spec deregister(#session{}) -> ok | {error, term()}.
+deregister(#session{pid=Pid, user=User}) ->
+    case get_apl(?MESSAGE, User, 1) of
+	[] ->
+	    {error, <<"serv down">>};
+	PrefList ->
+	    [IndexNode| _RestPrefList] = PrefList,
+	    riak_core_vnode_master:sync_command(IndexNode, {deregister, Pid},
+						?SERV, ?TIMEOUT)
+    end;
+deregister(_) ->
+    {error, <<"not impl">>}.

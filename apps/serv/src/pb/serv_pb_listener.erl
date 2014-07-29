@@ -30,7 +30,7 @@ sock_opts() ->
 %% @doc The handle_call/3 gen_nb_server callback. Unused.
 -spec handle_call(term(), {pid(),_}, #state{}) -> {reply, term(), #state{}}.
 handle_call(_Req, _From, State) ->
-    {reply, not_implemented, State}.
+    {reply, {error, <<"not impl">>}, State}.
 
 %% @doc The handle_cast/2 gen_nb_server callback. Unused.
 -spec handle_cast(term(), #state{}) -> {noreply, #state{}}.

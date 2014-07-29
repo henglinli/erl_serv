@@ -20,28 +20,27 @@
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
-         handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 -export([wait_for_auth/2, wait_for_auth/3,
-         ready/2, ready/3,
-         reply/2, reply/3,
-         reply_then_stop/2, reply_then_stop/3,
-         wait_for_socket/2, wait_for_socket/3]).
+	 ready/2, ready/3,
+	 reply/2, reply/3,
+	 reply_then_stop/2, reply_then_stop/3,
+	 wait_for_socket/2, wait_for_socket/3]).
 
 -export([set_socket/2, send/2, sync_send/2]).
 
 -define(SERVER, ?MODULE).
 
 -record(state, {transport = {gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
-                                                % socket
-                socket = undefined :: undefined | inet:socket() | ssl:sslsocket(),
-                request = undefined :: undefined | term(),  % current request
-                peername = undefined :: undefined | {inet:ip_address(), inet:port_number()},
-                states = undefined :: term(), % per-service connection state
-                response = <<>> :: binary(),
-                session = undefined :: term()
-               }).
-
+						% socket
+		socket = undefined :: undefined | inet:socket() | ssl:sslsocket(),
+		request = undefined :: undefined | term(),  % current request
+		peername = undefined :: undefined | {inet:ip_address(), inet:port_number()},
+		states = undefined :: term(), % per-service connection state
+		response = <<>> :: binary(),
+		session = undefined :: term()
+	       }).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -72,18 +71,18 @@ set_socket(Pid, Socket) ->
 
 %% @doc sync send to client
 -spec sync_send({pid, Pid :: pid()} | {name, Name :: binary()},
-                Message :: binary() | iolist()) ->
-                       ok | {error, Reason :: term()}.
+		Message :: binary() | iolist()) ->
+		       ok | {error, Reason :: term()}.
 sync_send({name, Who}, Message)
   when erlang:is_binary(Who) ->
     case serv_pb_session:lookup(Who) of
-        undefined ->
-            {error, not_found};
-        Sessions ->
-            lists:map(fun({_Who, {pid, Pid}}) ->
-                              gen_fsm:sync_send_event(Pid, {message, Message})
-                      end,
-                      Sessions)
+	undefined ->
+	    {error, not_found};
+	Sessions ->
+	    lists:map(fun({_Who, {pid, Pid}}) ->
+			      gen_fsm:sync_send_event(Pid, {message, Message})
+		      end,
+		      Sessions)
     end;
 
 %% send server
@@ -98,15 +97,17 @@ sync_send({pid, Pid}, {server, {ErrCode, ErrMsg}})
     gen_fsm:sync_send_event(Pid, {server, EncodedServer});
 %% send reply
 sync_send({pid, Pid}, {reply, {Id, ErrCode, ErrMsg}})
-    when erlang:is_pid(Pid) ->
+  when erlang:is_pid(Pid) ->
     EncodedReply = encode_reply(Id, ErrCode, ErrMsg),
-    gen_fsm:sync_send_event(Pid, {reply, EncodedReply}).
-
+    gen_fsm:sync_send_event(Pid, {reply, EncodedReply});
+sync_send({pid, Pid}, {msg, Msg})
+  when erlang:is_pid(Pid) ->
+    gen_fsm:sync_send_event(Pid, {reply, [?SERVER_CHAT_CODE, Msg]}).
 %% @doc send to client
 -spec send(Who :: binary(), Message :: binary() | iolist()) ->
-                  ok | {error, Reason :: term()}.
+		  ok | {error, Reason :: term()}.
 send(Name, _Message) when erlang:is_binary(Name) ->
-    {error, not_impl}.
+    {error, <<"not impl">>}.
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -166,30 +167,30 @@ wait_for_socket(_Event, State) ->
 %% @end
 %%--------------------------------------------------------------------
 wait_for_socket({set_socket, Socket}, _From,
-                #state{transport= {_Transport, Control}} = State) ->
+		#state{transport= {_Transport, Control}} = State) ->
     case Control:peername(Socket) of
-        {ok, PeerInfo} ->
-            Control:setopts(Socket, [{active, once}]),
-            %% check if security is enabled, if it is wait for TLS, otherwise go
-            %% straight into connected state
-            case app_helper:get_env(serv_pb, public, false) of
-                true ->
-                    {reply, ok, ready,
-                     State#state{request=undefined,
-                                 socket=Socket,
-                                 peername=PeerInfo}};
-                _Else ->
-                    {reply, ok, wait_for_auth,
-                     State#state{request=undefined,
-                                 socket=Socket,
-                                 peername=PeerInfo}}
-            end;
-        {error, Reason} ->
-            lager:debug("Could not get PB socket peername: ~p", [Reason]),
-            %% It's not really "ok", but there's no reason for the
-            %% listener to crash just because this socket had an
-            %% error. See riak_api#54.
-            {stop, normal, Reason, State}
+	{ok, PeerInfo} ->
+	    Control:setopts(Socket, [{active, once}]),
+	    %% check if security is enabled, if it is wait for TLS, otherwise go
+	    %% straight into connected state
+	    case app_helper:get_env(serv_pb, public, false) of
+		true ->
+		    {reply, ok, ready,
+		     State#state{request=undefined,
+				 socket=Socket,
+				 peername=PeerInfo}};
+		_Else ->
+		    {reply, ok, wait_for_auth,
+		     State#state{request=undefined,
+				 socket=Socket,
+				 peername=PeerInfo}}
+	    end;
+	{error, Reason} ->
+	    lager:debug("Could not get PB socket peername: ~p", [Reason]),
+	    %% It's not really "ok", but there's no reason for the
+	    %% listener to crash just because this socket had an
+	    %% error. See riak_api#54.
+	    {stop, normal, Reason, State}
     end;
 
 wait_for_socket(_Event, _From, State) ->
@@ -197,30 +198,30 @@ wait_for_socket(_Event, _From, State) ->
 
 %% auth, only for ping
 wait_for_auth(timeout, #state{socket = Socket,
-                              transport = {Transport, Control},
-                              response = Response} = State) ->
+			      transport = {Transport, Control},
+			      response = Response} = State) ->
     case Transport:send(Socket, Response) of
-        ok ->
-            Control:setopts(Socket, [{active, once}]),
-            {next_state, wait_for_auth, State};
-        {error, Reason} ->
-            lager:debug("send error: ~p", [Reason]),
-            {stop, Reason, State}
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, wait_for_auth, State};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, State}
     end;
 
 wait_for_auth(_Event, State) ->
     {next_state, wait_for_auth, State}.
 %% for select
 wait_for_auth({server, Server}, _From,
-              #state{socket = Socket,
-                     transport = {Transport, Control}} = State) ->
+	      #state{socket = Socket,
+		     transport = {Transport, Control}} = State) ->
     case Transport:send(Socket, Server) of
-        ok ->
-            Control:setopts(Socket, [{active, once}]),
-            {reply, ok, wait_for_auth, State};
-        {error, Reason} ->
-            lager:debug("send error: ~p", [Reason]),
-            {stop, Reason, State}
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {reply, ok, wait_for_auth, State};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, State}
     end;
 
 wait_for_auth(_Event, _From, State) ->
@@ -238,15 +239,15 @@ ready(_Event, _From, State) ->
 
 %% reply
 reply(timeout, #state{socket = Socket,
-                      transport = {Transport, Control},
-                      response = Response} = State) ->
+		      transport = {Transport, Control},
+		      response = Response} = State) ->
     case Transport:send(Socket, Response) of
-        ok ->
-            Control:setopts(Socket, [{active, once}]),
-            {next_state, ready, State};
-        {error, Reason} ->
-            lager:debug("send error: ~p", [Reason]),
-            {stop, Reason, State}
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, ready, State};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, State}
     end;
 
 reply(_Event, State) ->
@@ -257,14 +258,14 @@ reply(_Event, _From, State) ->
 
 %% reply then stop
 reply_then_stop(timeout, #state{response=Response,
-                                socket = Socket,
-                                transport = {Transport, _Control}
-                               } = State) ->
+				socket = Socket,
+				transport = {Transport, _Control}
+			       } = State) ->
     case Transport:send(Socket, Response) of
-        ok ->
-            {stop, normal, State};
-        {error, Reason} ->
-            {stop, Reason, State}
+	ok ->
+	    {stop, normal, State};
+	{error, Reason} ->
+	    {stop, Reason, State}
     end;
 
 reply_then_stop(_Event, State) ->
@@ -334,120 +335,136 @@ handle_info({tcp, Socket, _Data}, handle_info, State) ->
     %% req =/= undefined: received a new request while another was in
     %% progress -> Error
     lager:debug("Received a new PB socket request"
-                " while another was in progress"),
+		" while another was in progress"),
     Response = encode(#response{errmsg = <<"last request not done">>,
-                                errcode = 4}),
+				errcode = 4}),
     {next_state, reply_then_stop,
      State#state{socket = Socket,
-                 response = Response}, 0};
+		 response = Response}, 0};
 
 handle_info({tcp, Socket, Packet}, wait_for_auth,
-            #state{request=undefined,
-                   socket=Socket,
-                   peername = _PeerInfo} = State) ->
+	    #state{request=undefined,
+		   socket=Socket,
+		   peername = _PeerInfo} = State) ->
     Ok = encode(#response{errmsg = <<"Ok">>,
-                          errcode = 0}),
+			  errcode = 0}),
     BadPacket = encode(#response{errmsg = <<"bad packet">>,
-                              errcode = 1}),
+			      errcode = 1}),
     InternalErr = encode(#response{errmsg = <<"internal error">>,
-                                   errcode = 2}),
+				   errcode = 2}),
     NotLogin = encode(#response{errmsg = <<"not login">>,
-                                errcode = 3}),
+				errcode = 3}),
     NotImpl = encode(#response{errmsg = <<"not implement">>,
-                               errcode = 4}),
+			       errcode = 4}),
     case parse_packat(Packet) of
-        %% unkown packat
-        undefined ->
-            {next_state, reply_then_stop,
-             State#state{response = BadPacket}, 0};
-        %% ping packet
-        {?PING_CODE, _MsgData} ->
-            {next_state, wait_for_auth, State#state{response = Ok}, 0};
-        %% select packet
-        {?SELECT_CODE, MsgData} ->
-            case serv_pb_base_pb:decode(select, MsgData) of
-                #select{user = User} ->
-                    ok = serv:send({select, erlang:self(), User, 1}),
-                    {next_state, wait_for_auth, State};
-                _Other ->
-                    {next_state, reply_then_stop,
-                     State#state{response = InternalErr}, 0}
-            end;
-        %% auth packet, register or login
-        {?AUTH_CODE, MsgData} ->
-            case serv_pb_base_pb:decode(auth, MsgData) of
-                #auth{user = User, password = _Password, how = How} ->
-                    case How of
-                        1 -> % register
-                            %{do_register, User, Password},
-                            {next_state, reply_then_stop,
-                             State#state{response = Ok}, 0};
-                        2 -> % login
-                            case serv_pb_session:register(User) of
-                                true ->
-                                    %% todo: check password and store
-                                    {next_state, reply,
-                                     State#state{response = Ok,
-                                                 session = User}, 0};
-                                _Other ->
-                                    lager:error("serv_pb_session:register/2", []),
-                                    {next_state, reply_then_stop,
-                                     State#state{response = InternalErr}, 0}
-                            end;
-                        _Else ->
-                            {next_state, reply_then_stop,
-                             State#state{response = NotImpl}, 0}
-                    end;
-                _Other ->
-                    {next_state, reply_then_stop,
-                     State#state{response = InternalErr}, 0}
-            end;
-        % other	packet
-        {_MsgCode, _MsgData} ->
-            {next_state, reply_then_stop,
-             State#state{response = NotLogin}, 0}
+	%% unkown packat
+	undefined ->
+	    {next_state, reply_then_stop,
+	     State#state{response = BadPacket}, 0};
+	%% ping packet
+	{?PING_CODE, _MsgData} ->
+	    {next_state, wait_for_auth, State#state{response = Ok}, 0};
+	%% select packet
+	{?SELECT_CODE, MsgData} ->
+	    case serv_pb_base_pb:decode(select, MsgData) of
+		#select{user = User} ->
+		    ok = serv:send({select, erlang:self(), User, 1}),
+		    {next_state, wait_for_auth, State};
+		_Other ->
+		    {next_state, reply_then_stop,
+		     State#state{response = InternalErr}, 0}
+	    end;
+	%% auth packet, register or login
+	{?AUTH_CODE, MsgData} ->
+	    case serv_pb_base_pb:decode(auth, MsgData) of
+		#auth{user=User, password=Password, how=How} ->
+		    case How of
+			1 -> % register
+			    %{do_register, User, Password},
+			    {next_state, reply_then_stop,
+			     State#state{response = Ok}, 0};
+			2 -> % login
+			     case app_helper:get_env(serv, session_type, riak_core) of
+				 riak_core ->
+				    %% todo: check password and store
+				    case serv:register(#session{pid=erlang:self(),
+								user=User,
+								token=Password}) of
+					ok ->
+					    {next_state, reply,
+					     State#state{response = Ok,
+							 session = User}, 0};
+					_Else ->
+					    {next_state, reply_then_stop,
+					     State#state{response = InternalErr}, 0}
+				    end;
+				_Else ->
+				    case serv_pb_session:register(User) of
+					true ->
+					    %% todo: check password and store
+					    {next_state, reply,
+					     State#state{response = Ok,
+							 session = User}, 0};
+					_Other ->
+					    lager:error("serv_pb_session:register/2", []),
+					    {next_state, reply_then_stop,
+					     State#state{response = InternalErr}, 0}
+				    end
+				end;
+			_Else ->
+			    {next_state, reply_then_stop,
+			     State#state{response = NotImpl}, 0}
+		    end;
+		_Other ->
+		    {next_state, reply_then_stop,
+		     State#state{response = InternalErr}, 0}
+	    end;
+	% other	packet
+	{_MsgCode, _MsgData} ->
+	    {next_state, reply_then_stop,
+	     State#state{response = NotLogin}, 0}
     end;
 
 handle_info({tcp, Socket, Packet}, _StateName,
-            #state{request=undefined,
-                   socket=Socket,
-                   states = HandlerStates} = State) ->
+	    #state{request=undefined,
+		   socket=Socket,
+		   states = HandlerStates} = State) ->
     Ok = encode(#response{errmsg = <<"Ok">>,
-                          errcode = 0}),
+			  errcode = 0}),
     BadPacket = encode(#response{errmsg = <<"bad packet">>,
-                              errcode = 1}),
+			      errcode = 1}),
     NotImpl = encode(#response{errmsg = <<"not implement">>,
-                               errcode = 4}),
+			       errcode = 4}),
     InternalErr = encode(#response{errmsg = <<"internal error">>,
-                                   errcode = 2}),
+				   errcode = 2}),
     AlreadyLogin = encode(#response{errmsg = <<"already login">>,
-                                    errcode = 5}),
+				    errcode = 5}),
     case parse_packat(Packet) of
-        undefined ->
-            {next_state, reply_then_stop, State#state{response = BadPacket}, 0};
-        {?PING_CODE, _MsgData} ->
-            {next_state, reply, State#state{response = Ok}, 0};
-        {?AUTH_CODE, _MsgData} ->
-            {next_state, reply, State#state{response = AlreadyLogin}, 0};
-        {MsgCode, MsgData} ->
-            case serv_pb_handler:lookup(MsgCode) of
-                undefined ->
-                    lager:warning("unregistered message: ~p", [MsgCode]),
-                    {next_state, reply, State#state{response = NotImpl}, 0};
-                Handler when is_atom(Handler) ->
-                    case Handler:handle(MsgData, HandlerStates) of
-                        {noreply, NewHandlerStates} ->
-                            {next_state, ready,
-                             State#state{states = NewHandlerStates}};
-                        {reply, Response, NewHandlerStates} ->
-                            {next_state, reply,
-                             State#state{response = Response,
-                                         states = NewHandlerStates}, 0};
-                        {error, _Reason} ->
-                            {next_state, reply_then_stop,
-                             State#state{response = InternalErr}, 0}
-                    end
-            end
+	undefined ->
+	    {next_state, reply_then_stop, State#state{response = BadPacket}, 0};
+	{?PING_CODE, _MsgData} ->
+	    {next_state, reply, State#state{response = Ok}, 0};
+	{?AUTH_CODE, _MsgData} ->
+	    {next_state, reply, State#state{response = AlreadyLogin}, 0};
+	{MsgCode, MsgData} ->
+	    case serv_pb_handler:lookup(MsgCode) of
+		undefined ->
+		    lager:warning("unregistered message: ~p", [MsgCode]),
+		    {next_state, reply, State#state{response = NotImpl}, 0};
+		Handler when is_atom(Handler) ->
+		    case Handler:handle(MsgData, HandlerStates) of
+			{noreply, NewHandlerStates} ->
+			    {next_state, ready,
+			     State#state{states = NewHandlerStates}};
+			{reply, Response, NewHandlerStates} ->
+			    {next_state, reply,
+			     State#state{response = Response,
+					 states = NewHandlerStates}, 0};
+			{error, _Reason} ->
+			    {next_state, reply_then_stop,
+			     State#state{response = InternalErr}, 0}
+		    end
+	    end
     end;
 
 %% other process message to reply
@@ -483,21 +500,27 @@ handle_info(Message, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _StateName,
-         #state{socket = Socket,
-                transport = {Transport, _Control},
-                session = User}) ->
+	 #state{socket = Socket,
+		transport = {Transport, _Control},
+		session = User}) ->
     case Socket of
-        undefined ->
-            continue;
-        _Socket ->
-            Transport:close(Socket)
+	undefined ->
+	    continue;
+	_Socket ->
+	    Transport:close(Socket)
     end,
     case User of
-        undefined ->
-            done;
-        _User ->
-            _Result = serv_pb_session:unregister(User),
-            done
+	undefined ->
+	    done;
+	_User ->
+	    case app_helper:get_env(serv, session_type, riak_core) of
+		riak_core ->
+		    Session = #session{pid=erlang:self(), user=User},
+		    _Result = serv:deregister(Session);
+		_Else ->
+		    _Result = serv_pb_session:unregister(User),
+		    done
+	    end
     end.
 
 %%--------------------------------------------------------------------
@@ -516,9 +539,9 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 -spec parse_packat(Packet::binary()) ->
-                          undefined | {MsgCode::integer(), MsgData::binary()}.
+			  undefined | {MsgCode::integer(), MsgData::binary()}.
 parse_packat(<<MsgCode:8/big-unsigned-integer,
-               MsgData/binary>>) ->
+	       MsgData/binary>>) ->
     {MsgCode, MsgData};
 parse_packat(_) ->
     undefined.
@@ -530,13 +553,13 @@ encode(Error) ->
 -spec encode_reply(integer(), integer(), binary()) -> iolist().
 encode_reply(Id, ErrCode, ErrMsg) ->
     Reply = serv_pb_chat_pb:encode(#reply{id=Id,
-                                          errcode=ErrCode,
-                                          errmsg=ErrMsg}),
+					  errcode=ErrCode,
+					  errmsg=ErrMsg}),
     [?REPLY_CODE, Reply].
 
 -spec encode_server(integer(), binary(), binary()) -> iolist().
 encode_server(ErrCode, ErrMsg, Ip) ->
     Server = serv_pb_base_pb:encode(#server{errcode=ErrCode,
-                                            ip = Ip,
-                                            errmsg=ErrMsg}),
+					    ip = Ip,
+					    errmsg=ErrMsg}),
     [?SERVER_CODE, Server].
