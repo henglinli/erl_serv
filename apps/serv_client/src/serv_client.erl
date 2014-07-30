@@ -38,8 +38,9 @@
 
 -export([do_connect/2, do_connect/3,
 	 do_login/2, do_login/3,
-	 do_request/2, do_request/3]).
-
+	 do_request/2, do_request/3
+	]).
+	
 -record(state, {socket = undefined :: gen_tcp:socket(),
 		self = <<>> :: binary(),
 		password = <<>> :: binary(),
@@ -170,8 +171,8 @@ do_login(_Event, _From, State) ->
 
 %% do request
 do_request(timeout,
-	   #state{socket=Socket, 
-		  self=Self, 
+	   #state{socket=Socket,
+		  self=Self,
 		  clients=N,
 		  seed=_S}=State) ->
     Which = crypto:rand_uniform(0, N),
@@ -186,28 +187,15 @@ do_request(timeout,
 	{error, Reason} ->
 	    {stop, Reason, State};
 	ok ->
-	    {next_state, do_request, State}
+	    {next_state, do_request, State, 5000}
     end;
 
 do_request(_Event, State) ->
-    {next_state, do_request, State, 5}.
+    {next_state, do_request, State}.
 
 do_request(#request{command=chat_random,data=N}, _From,
-	   #state{socket=Socket, self=Self, seed=_S}=State) ->
-    Which = crypto:rand_uniform(0, N),
-    Id = erlang:integer_to_binary(Which),
-    To = <<"lee@", Id/binary>>,
-    Msg = <<"random hello!">>,
-    ProtobufChat = #chat{from = Self, to = To,
-			 time = s(os:timestamp()),
-			 msg = Msg},
-    Chat = serv_pb_chat_pb:encode(ProtobufChat),
-    case gen_tcp:send(Socket, [?CHAT_CODE, Chat]) of
-	{error, Reason} ->
-	    {stop, Reason, {error, Reason}, State};
-	ok ->
-	    {reply, ok, do_request, State#state{clients=N}}
-    end;
+	   #state{}=State) ->
+    {reply, ok, do_request, State#state{clients=N}, 0};
 
 do_request(#request{command = chat, data = {To, Msg}}, _From,
 	   #state{socket = Socket, self = Self} = State) ->
@@ -305,6 +293,37 @@ handle_info({tcp_closed, _Socket}, _StateName, State) ->
 handle_info({tcp_error, _Socket, Reason}, _StateName, State) ->
     lager:info("connection error: ~p", [Reason]),
     {stop, Reason, State#state{socket = undefined}};
+
+handle_info({tcp, Socket, Data}, do_request = StateName, State) ->
+    case handle_packet(Data) of
+	noreply ->
+	    {next_state, StateName, State};
+	{address, Ip} ->
+	    Address = erlang:binary_to_list(Ip),
+	    case inet:parse_address(Address) of
+		{ok, IPAddress} ->
+		    case inet:peername(Socket) of
+			{ok, {IPAddress, _Port}} ->
+			    {next_state, StateName, State, 5000};
+			{ok, _} ->
+			    lager:info("please reconnect to ~p", [Ip]),
+			    {stop, normal, State};
+			{error, Reason} ->
+			    {stop, Reason, State}
+		    end;
+		{error, einval} ->
+		    {stop, einval, State}
+	    end;
+	{stop, ErrMsg} ->
+	    {stop, ErrMsg, State};
+	{reply, Reply} ->
+	    case gen_tcp:send(Socket, Reply) of
+		{error, Reason} ->
+		    {stop, Reason, State};
+		ok ->
+		    {next_state, StateName, State, 5000}
+	    end
+    end;
 
 handle_info({tcp, Socket, Data}, StateName, State) ->
     case handle_packet(Data) of

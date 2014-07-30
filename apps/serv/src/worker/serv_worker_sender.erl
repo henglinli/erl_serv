@@ -53,6 +53,7 @@ handle_work({select, From, User, _N},
 handle_work({forward,
 	     #message{id=Id, from=From, to=ToWho, msg=_Msg} = Message,
 	     N}, WorkState) ->
+    %% lager:info("forward message from ~p to ~p", [From, ToWho]),
     case get_apl(?MESSAGE, ToWho, N) of
 	[] ->
 	    {reply, From, {reply, {Id, 1, <<"serv down">>}}, WorkState};

@@ -26,7 +26,6 @@ handle(Chat, undefined) ->
 	%% ToDo: check from is self
 	%% ToDo: check To is valid(is Who can send mesasge to)
         #chat{from = _Self, to = To} ->
-            lager:info("chat to ~p", [To]),
 	    %% send [mesasge] to server
 	    Message = #message{id=1, from=erlang:self(), to=To, msg=Chat},
 	    ok = serv:send({forward, Message, ?N}),
@@ -43,7 +42,6 @@ handle(Chat, undefined) ->
 handle(Chat, #state{last_id = LastId} = State) ->
     case serv_pb_chat_pb:decode(chat, Chat) of
         #chat{from = _Self, to = To} ->
-            lager:info("chat to ~p", [To]),
 	    %% send [mesasge] to server
 	    Id = LastId + 1,
 	    Message = #message{id=1, from=erlang:self(), to=To, msg=Chat},

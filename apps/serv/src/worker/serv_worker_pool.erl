@@ -41,8 +41,9 @@ notify({worker_start, _Pid} = Info) ->
 notify({last_worker_start, _Pid} = Info) ->
     gen_fsm:send_event(?SERVER, Info);
 
+%% !!! send_event =/= send_all_state_event
 notify({pid, _Pid} = Info) ->
-    gen_fsm:send_event(?SERVER, Info).
+    gen_fsm:send_all_state_event(?SERVER, Info).
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a gen_fsm process which calls Module:init/1 to
@@ -174,7 +175,7 @@ handle_event({pid, _Pid} = Worker, _StateName,
 	    serv_worker:handle_work(Worker, Work),
 	    {next_state, queueing, State#state{queue=Rem}};
 	{empty, EmptyQueue} ->
-	    NewPool = queue:in({pid, Worker}, Pool),
+	    NewPool = queue:in(Worker, Pool),
 	    {next_state, ready,
 	     State#state{queue=EmptyQueue, pool=NewPool}}
     end;

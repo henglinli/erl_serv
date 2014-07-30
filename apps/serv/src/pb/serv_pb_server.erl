@@ -24,7 +24,6 @@
 
 -export([wait_for_auth/2, wait_for_auth/3,
 	 ready/2, ready/3,
-	 reply/2, reply/3,
 	 reply_then_stop/2, reply_then_stop/3,
 	 wait_for_socket/2, wait_for_socket/3]).
 
@@ -194,7 +193,7 @@ wait_for_socket({set_socket, Socket}, _From,
     end;
 
 wait_for_socket(_Event, _From, State) ->
-    {reply, unknown_message, wait_for_socket, State}.
+    {reply, {error, <<"not impl">>}, wait_for_socket, State}.
 
 %% auth, only for ping
 wait_for_auth(timeout, #state{socket = Socket,
@@ -225,20 +224,10 @@ wait_for_auth({server, Server}, _From,
     end;
 
 wait_for_auth(_Event, _From, State) ->
-    {reply, unknown_message, wait_for_auth, State}.
+    {reply, {error, <<"not impl">>}, wait_for_auth, State}.
 
 %% ready
-ready(_Event, State) ->
-    {next_state, ready, State}.
-
-ready({reply, Reply}, _From, State) ->
-    {reply, ok, reply, State#state{response=Reply}, 0};
-
-ready(_Event, _From, State) ->
-    {reply, unknown_message, ready, State}.
-
-%% reply
-reply(timeout, #state{socket = Socket,
+ready(timeout, #state{socket = Socket,
 		      transport = {Transport, Control},
 		      response = Response} = State) ->
     case Transport:send(Socket, Response) of
@@ -250,11 +239,23 @@ reply(timeout, #state{socket = Socket,
 	    {stop, Reason, State}
     end;
 
-reply(_Event, State) ->
+ready(_Event, State) ->
     {next_state, ready, State}.
 
-reply(_Event, _From, State) ->
-    {reply, unknown_message, ready, State}.
+ready({reply, Reply}, _From,
+      #state{socket = Socket,
+	     transport = {Transport, Control}}=State) ->
+    case Transport:send(Socket, Reply) of
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {reply, ok, ready, State};
+	{error, Reason} ->
+	    lager:debug("send error: ~p", [Reason]),
+	    {stop, Reason, {error, <<"not connected">>}, State}
+    end;
+
+ready(_Event, _From, State) ->
+    {reply, {error, <<"not imp">>}, ready, State}.
 
 %% reply then stop
 reply_then_stop(timeout, #state{response=Response,
@@ -272,7 +273,7 @@ reply_then_stop(_Event, State) ->
     {stop, normal, State}.
 
 reply_then_stop(_Event, _From, State) ->
-    {stop, normal, unknown_message, State}.
+    {stop, normal, {error, <<"not impl">>}, State}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -307,7 +308,7 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event(_Event, _From, StateName, State) ->
-    Reply = unknown_message,
+    Reply = {error, <<"not impl">>},
     {reply, Reply, StateName, State}.
 
 %%--------------------------------------------------------------------
@@ -391,7 +392,7 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
 								user=User,
 								token=Password}) of
 					ok ->
-					    {next_state, reply,
+					    {next_state, ready,
 					     State#state{response = Ok,
 							 session = User}, 0};
 					_Else ->
@@ -402,7 +403,7 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
 				    case serv_pb_session:register(User) of
 					true ->
 					    %% todo: check password and store
-					    {next_state, reply,
+					    {next_state, ready,
 					     State#state{response = Ok,
 							 session = User}, 0};
 					_Other ->
@@ -443,21 +444,21 @@ handle_info({tcp, Socket, Packet}, _StateName,
 	undefined ->
 	    {next_state, reply_then_stop, State#state{response = BadPacket}, 0};
 	{?PING_CODE, _MsgData} ->
-	    {next_state, reply, State#state{response = Ok}, 0};
+	    {next_state, ready, State#state{response = Ok}, 0};
 	{?AUTH_CODE, _MsgData} ->
-	    {next_state, reply, State#state{response = AlreadyLogin}, 0};
+	    {next_state, ready, State#state{response = AlreadyLogin}, 0};
 	{MsgCode, MsgData} ->
 	    case serv_pb_handler:lookup(MsgCode) of
 		undefined ->
 		    lager:warning("unregistered message: ~p", [MsgCode]),
-		    {next_state, reply, State#state{response = NotImpl}, 0};
+		    {next_state, ready, State#state{response = NotImpl}, 0};
 		Handler when is_atom(Handler) ->
 		    case Handler:handle(MsgData, HandlerStates) of
 			{noreply, NewHandlerStates} ->
 			    {next_state, ready,
 			     State#state{states = NewHandlerStates}};
 			{reply, Response, NewHandlerStates} ->
-			    {next_state, reply,
+			    {next_state, ready,
 			     State#state{response = Response,
 					 states = NewHandlerStates}, 0};
 			{error, _Reason} ->
@@ -467,21 +468,6 @@ handle_info({tcp, Socket, Packet}, _StateName,
 	    end
     end;
 
-%% other process message to reply
-handle_info({message, Message}, ready, State) ->
-    {next_state, reply,
-     State#state{response = Message}, 0};
-%% handle_info({'DOWN', MonitorRef, _Type, Object, _Info}, StateName,
-%%          State = #state{}) ->
-%%     case erlang:get(Object) of
-%%	undefined ->
-%%          continue;
-%%	{user, User} ->
-%%          _Ignore = erlang:erase(User),
-%%          _Ignore = erlang:erase(Object)
-%%     end,
-%%     _Result = erlang:demonitor(MonitorRef, [flush]),
-%%     {next_state, StateName, State};
 % unknown mesasge
 handle_info(Message, StateName, State) ->
     %% Throw out messages we don't care about, but log them
