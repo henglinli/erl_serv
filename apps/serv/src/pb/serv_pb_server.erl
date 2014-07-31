@@ -33,9 +33,8 @@
 
 -record(state, {transport = {gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
 						% socket
-		socket = undefined :: undefined | inet:socket() | ssl:sslsocket(),
-		request = undefined :: undefined | term(),  % current request
-		peername = undefined :: undefined | {inet:ip_address(), inet:port_number()},
+		socket = undefined :: inet:socket() | ssl:sslsocket(),
+		request = undefined :: term(),  % current request
 		states = undefined :: term(), % per-service connection state
 		response = <<>> :: binary(),
 		session = undefined :: term()
@@ -168,7 +167,7 @@ wait_for_socket(_Event, State) ->
 wait_for_socket({set_socket, Socket}, _From,
 		#state{transport= {_Transport, Control}} = State) ->
     case Control:peername(Socket) of
-	{ok, PeerInfo} ->
+	{ok, _PeerInfo} ->
 	    Control:setopts(Socket, [{active, once}]),
 	    %% check if security is enabled, if it is wait for TLS, otherwise go
 	    %% straight into connected state
@@ -176,13 +175,11 @@ wait_for_socket({set_socket, Socket}, _From,
 		true ->
 		    {reply, ok, ready,
 		     State#state{request=undefined,
-				 socket=Socket,
-				 peername=PeerInfo}};
+				 socket=Socket}};
 		_Else ->
 		    {reply, ok, wait_for_auth,
 		     State#state{request=undefined,
-				 socket=Socket,
-				 peername=PeerInfo}}
+				 socket=Socket}}
 	    end;
 	{error, Reason} ->
 	    lager:debug("Could not get PB socket peername: ~p", [Reason]),
@@ -345,8 +342,7 @@ handle_info({tcp, Socket, _Data}, handle_info, State) ->
 
 handle_info({tcp, Socket, Packet}, wait_for_auth,
 	    #state{request=undefined,
-		   socket=Socket,
-		   peername = _PeerInfo} = State) ->
+		   socket=Socket} = State) ->
     Ok = encode(#response{errmsg = <<"Ok">>,
 			  errcode = 0}),
     BadPacket = encode(#response{errmsg = <<"bad packet">>,

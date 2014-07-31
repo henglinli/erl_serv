@@ -26,6 +26,7 @@
 	]).
 %% test
 -export([test/1,
+	 test/2,
 	 chat_one/0,
 	 login_one/0,
 	 chat_test/0
@@ -170,7 +171,7 @@ do_login(_Event, _From, State) ->
     {reply, unknown_message, do_login, State}.
 
 %% do request
-do_request(timeout,
+do_request(continue,
 	   #state{socket=Socket,
 		  self=Self,
 		  clients=N,
@@ -187,7 +188,9 @@ do_request(timeout,
 	{error, Reason} ->
 	    {stop, Reason, State};
 	ok ->
-	    {next_state, do_request, State, 5000}
+	    Time = crypto:rand_uniform(2000, 8000),
+	    gen_fsm:send_event_after(Time, continue),
+	    {next_state, do_request, State}
     end;
 
 do_request(_Event, State) ->
@@ -195,7 +198,9 @@ do_request(_Event, State) ->
 
 do_request(#request{command=chat_random,data=N}, _From,
 	   #state{}=State) ->
-    {reply, ok, do_request, State#state{clients=N}, 0};
+    Time = crypto:rand_uniform(2000, 8000),
+    gen_fsm:send_event_after(Time, continue),
+    {reply, ok, do_request, State#state{clients=N}};
 
 do_request(#request{command = chat, data = {To, Msg}}, _From,
 	   #state{socket = Socket, self = Self} = State) ->
@@ -293,37 +298,6 @@ handle_info({tcp_closed, _Socket}, _StateName, State) ->
 handle_info({tcp_error, _Socket, Reason}, _StateName, State) ->
     lager:info("connection error: ~p", [Reason]),
     {stop, Reason, State#state{socket = undefined}};
-
-handle_info({tcp, Socket, Data}, do_request = StateName, State) ->
-    case handle_packet(Data) of
-	noreply ->
-	    {next_state, StateName, State};
-	{address, Ip} ->
-	    Address = erlang:binary_to_list(Ip),
-	    case inet:parse_address(Address) of
-		{ok, IPAddress} ->
-		    case inet:peername(Socket) of
-			{ok, {IPAddress, _Port}} ->
-			    {next_state, StateName, State, 5000};
-			{ok, _} ->
-			    lager:info("please reconnect to ~p", [Ip]),
-			    {stop, normal, State};
-			{error, Reason} ->
-			    {stop, Reason, State}
-		    end;
-		{error, einval} ->
-		    {stop, einval, State}
-	    end;
-	{stop, ErrMsg} ->
-	    {stop, ErrMsg, State};
-	{reply, Reply} ->
-	    case gen_tcp:send(Socket, Reply) of
-		{error, Reason} ->
-		    {stop, Reason, State};
-		ok ->
-		    {next_state, StateName, State, 5000}
-	    end
-    end;
 
 handle_info({tcp, Socket, Data}, StateName, State) ->
     case handle_packet(Data) of
@@ -509,33 +483,37 @@ s({MegaSecs, Secs, _MicroSecs}) ->
     MegaSecs*100000 + Secs.
 
 %%
--spec test(Clients :: pos_integer()) -> term().
-test(Clients) ->
+-spec test(Host :: inet:ip_address() | inet:hostname(), Clients :: pos_integer()) -> term().
+test(Host, Clients) ->
     application:start(serv_client),
-    test_helper(Clients, Clients, ok).
+    lager:set_loglevel(lager_console_backend, notice),
+    test_helper(Host, Clients, Clients, ok).
 
-test_helper(_Clients, 0, ok) ->
+test_helper(_Host, _Clients, 0, ok) ->
     ok;
 
-test_helper(_Clients, _Which, error) ->
+test_helper(_Host, _Clients, _Which, error) ->
     error;
 
-test_helper(Clients, Which, ok) ->
-    Result = do_test(Clients, Which),
-    test_helper(Clients, Which-1, Result).
+test_helper(Host, Clients, Which, ok) ->
+    Result = do_test(Host, Clients, Which),
+    test_helper(Host, Clients, Which-1, Result).
 
-do_test(Clients, Which) ->
+do_test(Host, Clients, Which) ->
     Id = erlang:integer_to_binary(Which),
     User = <<"lee@", Id/binary>>,
     case serv_client_sup:start_child() of
 	{ok , Pid} ->
-	    serv_client:connect(Pid),
+	    serv_client:connect(Pid, Host, 8087),
 	    serv_client:login(Pid, User),
 	    serv_client:chat(Pid, Clients),
 	    ok;
 	{error, _Reason} ->
 	    error
     end.
+
+test(Clients) ->
+    test("localhost", Clients).
 
 login_one() ->
     application:start(serv_client),
