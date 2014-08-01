@@ -17,7 +17,7 @@
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
-
+-define(DEFAULT_POOL_SIZE, 64).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -80,7 +80,8 @@ init([]) ->
     Args = [{worker_callback_mod, serv_worker_sender},
 	    {worker_args, []}],
 
-    ServWorkerSpecs = serv_worker_spec(8, Args, []),
+    PoolSize = app_helper:get_env(serv, pool_size, ?DEFAULT_POOL_SIZE);
+    ServWorkerSpecs = serv_worker_spec(PoolSize, Args, []),
 
     {ok, {SupFlags, [ServWorkerPooolSpec] ++ ServWorkerSpecs}}.
 
