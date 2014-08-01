@@ -80,7 +80,7 @@ init([]) ->
     Args = [{worker_callback_mod, serv_worker_sender},
 	    {worker_args, []}],
 
-    PoolSize = app_helper:get_env(serv, pool_size, ?DEFAULT_POOL_SIZE);
+    PoolSize = app_helper:get_env(serv, pool_size, ?DEFAULT_POOL_SIZE),
     ServWorkerSpecs = serv_worker_spec(PoolSize, Args, []),
 
     {ok, {SupFlags, [ServWorkerPooolSpec] ++ ServWorkerSpecs}}.
