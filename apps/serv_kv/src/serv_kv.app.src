@@ -1,0 +1,12 @@
+{application, serv_kv,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { serv_kv_app, []}},
+  {env, []}
+ ]}.
