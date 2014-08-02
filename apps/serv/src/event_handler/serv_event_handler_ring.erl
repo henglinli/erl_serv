@@ -14,7 +14,7 @@
 
 %% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
 
--module(serv_ring_event_handler).
+-module(serv_event_handler_ring).
 -behaviour(gen_event).
 
 %% gen_event callbacks
