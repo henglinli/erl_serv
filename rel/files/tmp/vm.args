@@ -20,4 +20,4 @@
 #-env ERL_FULLSWEEP_AFTER 10
 
 ## scheduler bind
-+sbt db
+##+sbt db
