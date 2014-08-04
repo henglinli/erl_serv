@@ -22,6 +22,7 @@
 -export([wait_worker_start/2, wait_worker_start/3,
 	 ready/2, queueing/2, ready/3, queueing/3]).
 
+-define(NEW_POOL, true).
 -define(SERVER, ?MODULE).
 
 -record(state, {
@@ -127,6 +128,21 @@ wait_worker_start(_Event, _From, State) ->
 ready(_Event, _From, State) ->
     {reply, {error, <<"not impl">>}, ready, State}.
 
+-ifdef(NEW_POOL).
+ready({work, Work},
+      #state{pool=Pool} = State) ->
+    case queue:out(Pool) of
+	{empty, _EmptyPool} ->
+	    {stop, error, State};
+	{{value, {pid, Pid} = Worker}, NewPool}
+	  when erlang:is_pid(Pid) ->
+	    serv_worker:handle_work(Worker, Work),
+	    {next_state, ready,
+	     State#state{pool=queue:in(Worker, NewPool)}}
+    end;
+ready(_Event, State) ->
+    {next_state, ready, State}.
+-else.
 ready({work, Work} = Msg,
       #state{pool=Pool, queue=Queue} = State) ->
     case queue:out(Pool) of
@@ -140,9 +156,9 @@ ready({work, Work} = Msg,
 	    {next_state, ready,
 	     State#state{pool=NewPool}}
     end;
-
 ready(_Event, State) ->
     {next_state, ready, State}.
+-endif.
 
 queueing(_Event, _From, State) ->
     {reply, ok, queueing, State}.
