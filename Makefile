@@ -24,6 +24,7 @@ distclean: clean devclean relclean
 #$(REBAR) delete-deps
 
 rel: all
+	@rm -rf rel/serv
 	$(REBAR) generate
 
 relclean:

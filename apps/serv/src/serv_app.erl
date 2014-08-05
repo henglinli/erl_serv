@@ -24,11 +24,12 @@ start(_StartType, _StartArgs) ->
 
     case serv_sup:start_link() of
 	{ok, Pid} ->
-	    ok = riak_core:register(serv, [{vnode_module, serv_vnode}]),
+	    ok = riak_core:register(serv, [{vnode_module, serv_vnode},
+					   {stat_mod, serv_pb_stat}
+					  ]),
 	    ok = riak_core_node_watcher:service_up(?SERV, self()),
 	    ok = riak_core_ring_events:add_guarded_handler(serv_event_handler_ring, []),
 	    ok = riak_core_node_watcher_events:add_guarded_handler(serv_event_handler_node, []),
-	    ok = riak_core:register(serv, [{stat_mod, serv_pb_stat}]),
 	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},
 	    %% webmachine_router:add_route(EntryRoute),
 	    true = serv_pb_handler:register(?CHAT_CODE, serv_pb_handler_chat),
@@ -40,5 +41,5 @@ start(_StartType, _StartArgs) ->
     end.
 
 stop(_State) ->
-    true = serv_pb_handler:deregister(5),
+    true = serv_pb_handler:deregister(?CHAT_CODE),
     ok.
