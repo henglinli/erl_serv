@@ -23,7 +23,7 @@
 {sasl_log_dir,      "{{platform_log_dir}}/sasl"}.
 
 %% lager
-{console_log_default, file}.
+{console_log_default, console}.
 
 %%
 %% etc/vm.args
