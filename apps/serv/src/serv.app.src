@@ -9,8 +9,7 @@
 		  stdlib,
 		  lager,
 		  sidejob,
-		  riak_core,
-		  riak_kv
+		  riak_core
 		 ]},
   {mod, { serv_app, []}},
   {env, []}

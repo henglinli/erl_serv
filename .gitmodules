@@ -1,0 +1,3 @@
+[submodule "apps/serv_kv"]
+	path = apps/serv_kv
+	url = https://github.com/henglinli/serv_kv.git
