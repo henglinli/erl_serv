@@ -2,14 +2,15 @@
 {application, serv,
  [
   {description, "riak_core based app"},
-  {vsn, "0.0.1"},
+  {vsn, git},
   {registered, []},
   {applications, [
 		  kernel,
 		  stdlib,
 		  lager,
 		  sidejob,
-		  riak_core
+		  riak_core,
+		  serv_kv
 		 ]},
   {mod, { serv_app, []}},
   {env, []}

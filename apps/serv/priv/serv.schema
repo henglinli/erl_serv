@@ -40,14 +40,14 @@
  "lager.handlers",
  fun(Conf) ->
     SyslogHandler = [{lager_syslog_backend, ["riak", daemon, info]} ||
-		     cuttlefish:conf_get("log.syslog", Conf)],
+                     cuttlefish:conf_get("log.syslog", Conf)],
     ErrorHandler = case cuttlefish:conf_get("log.error.file", Conf) of
       undefined -> [];
       ErrorFilename -> [{lager_file_backend, [{file, ErrorFilename},
-					      {level, error},
-					      {size, 10485760},
-					      {date, "$D0"},
-					      {count, 5}]}]
+                                              {level, error},
+                                              {size, 10485760},
+                                              {date, "$D0"},
+                                              {count, 5}]}]
     end,
 
     ConsoleLogLevel = cuttlefish:conf_get("log.console.level", Conf),
@@ -55,10 +55,10 @@
 
     ConsoleHandler = {lager_console_backend, ConsoleLogLevel},
     ConsoleFileHandler = {lager_file_backend, [{file, ConsoleLogFile},
-					       {level, ConsoleLogLevel},
-					       {size, 10485760},
-					       {date, "$D0"},
-					       {count, 5}]},
+                                               {level, ConsoleLogLevel},
+                                               {size, 10485760},
+                                               {date, "$D0"},
+                                               {count, 5}]},
 
     ConsoleHandlers = case cuttlefish:conf_get("log.console", Conf) of
       off -> [];
@@ -95,9 +95,9 @@
  "lager.crash_log",
  fun(Conf) ->
      case cuttlefish:conf_get("log.crash", Conf) of
-	 false -> undefined;
-	 _ ->
-	     cuttlefish:conf_get("log.crash.file", Conf, "{{platform_log_dir}}/crash.log")
+         false -> undefined;
+         _ ->
+             cuttlefish:conf_get("log.crash.file", Conf, "{{platform_log_dir}}/crash.log")
      end
  end}.
 
@@ -165,15 +165,8 @@
    {default, on},
    {datatype, flag}
 ]}.
-%% add by henglinli@gmail.com
-%% @doc Enable consensus subsystem. Set to 'on' to enable the
-%% consensus subsystem used for strongly consistent Riak operations.
-{mapping, "strong_consistency", "riak_core.enable_consensus", [
-  {datatype, flag},
-  {default, on},
-  {commented, on}
-]}.
 
+%% add by henglinli@gmail.com
 %% @doc listener.protobuf.<name> is an IP address and TCP port that the Riak
 %% Protocol Buffers interface will bind.
 {mapping, "listener.protobuf.$name", "serv.pb", [
@@ -198,12 +191,12 @@
 {translation,
  "serv.pool_size",
  fun(Conf) ->
-	 Psize = case cuttlefish:conf_get("erlang.async_threads", Conf) of
-		     undefined ->
-			 64;
-		     Threads ->
-			 Threads
-		 end
+         Psize = case cuttlefish:conf_get("erlang.async_threads", Conf) of
+                     undefined ->
+                         64;
+                     Threads ->
+                         Threads
+                 end
  end
 }.
 %% @doc Cookie for distributed node communication.  All nodes in the
