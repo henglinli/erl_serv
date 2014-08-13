@@ -32,11 +32,28 @@
 
 -record(state, {ets_tab = undefined :: undefined | ets:tab()}).
 
-%% handle message
--callback handle(Request :: term(), State :: term()) ->
-    {error, Reason :: term()} |
-    {reply, Reply :: term(), NewState ::term()} |
-    {noreply, NewState :: term()}.
+%% @doc copy form basho/riak_api,
+%% decode/2 -> process/3 [-> procss_stream/3] -> encode/2
+%% @doc 1, decode binary to record
+-callback decode(Message :: binary()) ->
+    {ok, DecodedMessage :: term()} |
+    {error, Reason :: term()}.
+%% @doc 2, process record and return record
+-callback process(Message :: term(), State :: term()) ->
+    {reply, ReplyMessage :: term(), NewState :: term()} |
+    {reply, {stream, ReqId :: term()}, NewState :: term()} |
+    {error, Reason :: term(), NewState :: term()}.
+%% @doc 3, if return stream procss it
+-callback process_stream(Message :: term(), ReqId :: term(), State :: term()) ->
+    {reply, Reply :: [term()] | term(), NewState :: term()} |
+    {ignore, NewState :: term()} |
+    {done, Reply :: [term()] | term(), NewState :: term()} |
+    {done, NewState :: term()} |
+    {error, Reason :: term(), NewState :: term()}.
+%% @doc 4, encode record to iodata
+-callback encode(Message :: term()) ->
+    {ok, EncodedMessage :: iodata()} |
+    {error, Reason :: term()}.
 
 %%%===================================================================
 %%% API
@@ -217,7 +234,7 @@ handlers() ->
 -spec register(pos_integer(), module()) -> undefined | true.
 register(MsgCode, Handler)
   when is_integer(MsgCode), is_atom(Handler) ->
-	  ets:insert(?ETS_SERV_HANDLER_NAME, {MsgCode, Handler}).
+    ets:insert(?ETS_SERV_HANDLER_NAME, {MsgCode, Handler}).
 
 -spec deregister(pos_integer()) -> undefined | true.
 deregister(MsgCode)
@@ -266,8 +283,8 @@ register_test_case() ->
     ?assertEqual(true, register(1, fake_ping)),
     ?assertEqual(true, register(2, fake_info)),
 
-deregister_test_case() ->
-    ?assertEqual(true, deregister(2)).
+    deregister_test_case() ->
+			     ?assertEqual(true, deregister(2)).
 
 lookup_test_case() ->
     ?assertEqual({1, fake_ping}, lookup(1)).

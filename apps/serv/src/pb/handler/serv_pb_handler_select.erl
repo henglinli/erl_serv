@@ -1,32 +1,29 @@
 %%%-------------------------------------------------------------------
-%%% @author HenryLee <lee@OSX.local>
-%%% @copyright (C) 2014, HenryLee
+%%% @author  <lee@lee>
+%%% @copyright (C) 2014,
 %%% @doc
 %%%
 %%% @end
-%%% Created : 25 Jun 2014 by HenryLee <lee@OSX.local>
+%%% Created : 13 Aug 2014 by  <lee@lee>
 %%%-------------------------------------------------------------------
--module(serv_pb_handler_chat).
-
+-module(serv_pb_handler_select).
 -include("serv.hrl").
 -include("serv_pb_base_pb.hrl").
--include("serv_pb_chat_pb.hrl").
 %% handler API
 -export([decode/1, process/2, process_stream/3, encode/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
--record(state, {last_id :: integer}).
 
 %% @doc decode/2 -> process/3 [-> procss_stream/3] -> encode/2
-%% @doc 1, decode binary to record 
+%% @doc 1, decode binary to record
 -spec decode(Message :: binary()) ->
 		    {ok, DecodedMessage :: term()} |
 		    {error, Reason :: term()}.
-decode(Message) -> 
-    case serv_pb_chat_pb:decode(chat, Message) of
-	#chat{} = Record ->				   
+decode(Message) ->
+    case serv_pb_base_pb:decode(chat, Message) of
+	#select{} = Record ->
 	    {ok, Record};
 	_Other ->
 	    {error, <<"decode">>}
@@ -36,22 +33,10 @@ decode(Message) ->
 		     {reply, ReplyMessage :: term(), NewState :: term()} |
 		     {reply, {stream, ReqId :: term()}, NewState :: term()} |
 		     {error, Reason :: term(), NewState :: term()}.
-process(#chat{from=_Self, to=To}=Record, undefined) ->
-    %% send [mesasge] to server
-    Message = #message{id=1, from=erlang:self(), to=To, msg=Record},
-    ok = serv:send({forward, Message, ?N}),
-    %% reply [message id] to client
-    %% after [message] was sent, reply message was sent
-    {reply, #chat_id{id=1}, #state{last_id=1}};
-
-process(#chat{from=_Self, to=To}=Record, #state{last_id=LastId}) ->
-    %% send [mesasge] to server
-    Id = LastId + 1,
-    Message = #message{id=Id, from=erlang:self(), to=To, msg=Record},
-    ok = serv:send({forward, Message, ?N}),
-    %% reply [message id] to client
-    %% after [message] was sent, reply message was sent
-    {reply, #chat_id{id=Id}, #state{last_id=Id}};
+process(#select{user=User}, State) ->
+    ok=serv:send({select, erlang:self(), User, 1}),
+    Response = #response{errcode=0, errmsg = <<"Ok">>},
+    {reply, Response, State};
 
 process(_Message, State) ->
     {error, <<"process">>, State}.
@@ -70,13 +55,13 @@ process_stream(_Message, _ReqId, State) ->
 -spec encode(Message :: term()) ->
 		    {ok, EncodedMessage :: iodata()} |
 		    {error, Reason :: term()}.
-encode(#chat_id{}=ChatId) ->
-    EncodedRecordId = serv_pb_chat_pb:encode(ChatId),
-    [?CHAT_ID_CODE, EncodedRecordId];
+encode(#response{}=Response) ->
+    Encoded = serv_pb_base_pb:encode(Response),
+    [?CHAT_ID_CODE, Encoded];
 
-encode(_ChatId) ->
-    Reply = #reply{id=0, errcode=1, errmsg = <<"encode">>},
-    [?REPLY_CODE, serv_pb_chat_pb:encode(Reply)].
+encode(_Response) ->
+    Response = #response{errcode=1, errmsg = <<"bad response">>},
+    [?REPLY_CODE, serv_pb_base_pb:encode(Response)].
 
 %%%===================================================================
 %%% Internal functions
