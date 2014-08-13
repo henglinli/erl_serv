@@ -27,7 +27,7 @@ start(_StartType, _StartArgs) ->
 	    ok = riak_core:register(serv, [{vnode_module, serv_vnode},
 					   {stat_mod, serv_pb_stat}
 					  ]),
-	    ok = riak_core_node_watcher:service_up(serv, erlang:self()),
+	    ok = riak_core_node_watcher:service_up(?SERV, erlang:self()),
 	    ok = riak_core_ring_events:add_guarded_handler(serv_event_handler_ring, []),
 	    ok = riak_core_node_watcher_events:add_guarded_handler(serv_event_handler_node, []),
 	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},

@@ -26,11 +26,14 @@
 	]).
 %% test
 -export([test/1,
-	 test/2,
+	 test/3,
 	 chat_one/0,
 	 login_one/0,
 	 chat_test/0
 	]).
+
+-export([disable_log/0,
+	 enable_log/0]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
@@ -41,7 +44,7 @@
 	 do_login/2, do_login/3,
 	 do_request/2, do_request/3
 	]).
-	
+
 -record(state, {socket = undefined :: gen_tcp:socket(),
 		self = <<>> :: binary(),
 		password = <<>> :: binary(),
@@ -483,28 +486,30 @@ s({MegaSecs, Secs, _MicroSecs}) ->
     MegaSecs*100000 + Secs.
 
 %%
--spec test(Host :: inet:ip_address() | inet:hostname(), Clients :: pos_integer()) -> term().
-test(Host, Clients) ->
+-spec test(Host :: inet:ip_address() | inet:hostname(),
+	   Port :: inet:port_number(),
+	   Clients :: pos_integer()) -> term().
+test(Host, Port, Clients) ->
     application:start(serv_client),
-    lager:set_loglevel(lager_console_backend, notice),
-    test_helper(Host, Clients, Clients, ok).
+    disable_log(),
+    test_helper(Host, Port, Clients, Clients, ok).
 
-test_helper(_Host, _Clients, 0, ok) ->
+test_helper(_Host, _Port, _Clients, 0, ok) ->
     ok;
 
-test_helper(_Host, _Clients, _Which, error) ->
+test_helper(_Host, _Port, _Clients, _Which, error) ->
     error;
 
-test_helper(Host, Clients, Which, ok) ->
-    Result = do_test(Host, Clients, Which),
-    test_helper(Host, Clients, Which-1, Result).
+test_helper(Host, Port, Clients, Which, ok) ->
+    Result = do_test(Host, Port, Clients, Which),
+    test_helper(Host, Port, Clients, Which-1, Result).
 
-do_test(Host, Clients, Which) ->
+do_test(Host, Port, Clients, Which) ->
     Id = erlang:integer_to_binary(Which),
     User = <<"lee@", Id/binary>>,
     case serv_client_sup:start_child() of
 	{ok , Pid} ->
-	    serv_client:connect(Pid, Host, 8087),
+	    serv_client:connect(Pid, Host, Port),
 	    serv_client:login(Pid, User),
 	    serv_client:chat(Pid, Clients),
 	    ok;
@@ -513,13 +518,13 @@ do_test(Host, Clients, Which) ->
     end.
 
 test(Clients) ->
-    test("localhost", Clients).
+    test({192,168,1,210}, 8087, Clients).
 
 login_one() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
 	{ok , Pid} ->
-	    ok = serv_client:connect(Pid, "localhost", 8087),
+	    ok = serv_client:connect(Pid, {192,168,1,210}, 8087),
 	    ok = serv_client:login(Pid, <<"lee">>),
 	    {ok, Pid};
 	{error, Reason} ->
@@ -530,7 +535,7 @@ chat_one() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
 	{ok , Pid} ->
-	    ok = serv_client:connect(Pid, "localhost", 8087),
+	    ok = serv_client:connect(Pid, {192,168,1,210}, 8087),
 	    ok = serv_client:login(Pid, <<"lee">>),
 	    ok = serv_client:chat(Pid, <<"google">>),
 	    {ok, Pid};
@@ -542,11 +547,11 @@ chat_test() ->
     application:start(serv_client),
     case serv_client_sup:start_child() of
 	{ok, Pid} ->
-	    ok = serv_client:connect(Pid, "localhost", 8087),
+	    ok = serv_client:connect(Pid, {192,168,1,210}, 8087),
 	    ok = serv_client:login(Pid, <<"lee">>),
 	    case serv_client_sup:start_child() of
 		{ok, Pid1} ->
-		    ok = serv_client:connect(Pid1, "localhost", 8087),
+		    ok = serv_client:connect(Pid1, {192,168,1,210}, 8087),
 		    ok = serv_client:login(Pid1, <<"google">>),
 		    ok = serv_client:chat(Pid1, <<"lee">>),
 		    ok = serv_client:chat(Pid, <<"google">>),
@@ -557,3 +562,8 @@ chat_test() ->
 	{error, _Reason} ->
 	    error
     end.
+
+disable_log() ->
+    lager:set_loglevel(lager_console_backend, notice).
+enable_log() ->
+    lager:set_loglevel(lager_console_backend, info).
