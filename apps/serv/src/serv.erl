@@ -18,8 +18,15 @@
 	 send/1
 	]).
 
+%% serv_pb api
 -export([register/1,
 	 deregister/1]).
+
+%% rafter API
+-export([get/1, put/2, delete/1]).
+-export([set_config/1]).
+
+-define(RAFTER, serv_rafter).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -94,3 +101,38 @@ deregister(#session{pid=Pid, user=User}) ->
     end;
 deregister(_) ->
     {error, <<"not impl">>}.
+
+%% rafter api
+-spec set_config(Nodes :: [atom()]) ->
+    Result :: term().
+set_config([]) ->
+    {error, bad_arg};
+
+set_config(Nodes) ->
+    Peers = [{?RAFTER, Node} || Node <- Nodes],
+    Vstruct = rafter_voting_majority:majority(Peers),
+    rafter:set_config(?RAFTER, Vstruct).
+
+-spec get(Key::binary()) ->
+		 {ok, Value::binary()} |
+		 {error, Reason::term()}.
+get(<<"">>) ->
+    {error, bad_key};
+get(Key) ->
+    rafter:read_op(?RAFTER, {get, Key}).
+
+-spec put(Key::binary(), Value::binary()) ->
+		 ok | {error, Reason::term()}.
+put(<<"">>, _Value) ->
+    {error, bad_key};
+put(_Key, <<"">>) ->
+    {error, bad_value};
+put(Key, Value) ->
+    rafter:op(?RAFTER, {put, Key, Value}).
+
+-spec delete(Key::binary()) ->
+		    ok | {error, Reason::term()}.
+delete(<<"">>) ->
+    {error, bad_key};
+delete(Key) ->
+    rafter:op(?RAFTER, {delete, Key}).

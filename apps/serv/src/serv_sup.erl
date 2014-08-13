@@ -3,11 +3,20 @@
 
 -behaviour(supervisor).
 
+-include_lib("rafter/include/rafter_opts.hrl").
+
 %% API
 -export([start_link/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
+
+%% Helper macro
+-define (IF (Bool, A, B), if Bool -> A; true -> B end).
+
+%% Helper macro for declaring children of supervisor
+-define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
+
 
 %% ===================================================================
 %% API functions
@@ -59,11 +68,25 @@ init([]) ->
 		     {serv_pb_sup, start_link, []},
 		     Restart, Shutdown, supervisor, [serv_pb_sup]},
 
-    {ok, {SupFlags, [%RanchSupSpec,
-		     %ListenerSpec,
-		     ServVnodeSpec,
-		     %ServFsmPoolSpec
-		     %ServFsmSupSpec
-		     ServWokerPoolSupSpec,
-		     ServPbSupSpec
-		    ]}}.
+    %% Figure out which processes we should run...
+    HasStorageBackend = (app_helper:get_env(serv, storage_backend) /= undefined),
+    %% rafter
+    Backend = app_helper:get_env(serv, storage_backend, serv_rafter_backend_eleveldb),
+    RafterDir = app_helper:get_env(serv, rafter_root, "rafter"),
+    filelib:ensure_dir(RafterDir),
+    Opts = #rafter_opts{state_machine=Backend, logdir=RafterDir},
+
+    Rafter = {serv_rafter_sup,
+	      {rafter_consensus_sup, start_link,
+	       [{serv_rafter, erlang:node()}, Opts]},
+	      permanent, 5000, supervisor, [rafter_consensus_sup]},
+
+    %% Build the process list...
+    Processes = lists:flatten([
+			       ?IF(HasStorageBackend, Rafter, []),
+			       ServWokerPoolSupSpec,
+			       ServPbSupSpec,
+			       ServVnodeSpec
+			      ]),
+
+    {ok, {SupFlags, Processes}}.

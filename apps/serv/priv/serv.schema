@@ -183,9 +183,35 @@
  end
 }.
 
+%% @doc client limit for side job
 {mapping, "client_limit", "serv.client_limit", [
   {default, 10*1024*1024},
   {datatype, integer}
+]}.
+
+%% @doc Specifies the storage engine used for Riak's key-value data
+%% and secondary indexes (if supported).
+{mapping, "storage_backend", "serv.storage_backend", [
+  {default, leveldb},
+  {datatype, {enum, [leveldb, memory]}}
+]}.
+
+{translation,
+ "serv.storage_backend",
+ fun(Conf) ->
+    Setting = cuttlefish:conf_get("storage_backend", Conf),
+    case Setting of
+      leveldb -> serv_rafter_backend_eleveldb;
+      memory -> rafter_backend_ets;
+      _Default -> serv_rafter_backend_eleveldb
+    end
+ end}.
+
+%% @doc The directory where rafter log and meta are stored.
+{mapping, "rafter_root", "serv.rafter_root", [
+  {default, "$(platform_data_dir)/rafter"},
+  hidden,
+  {datatype, directory}
 ]}.
 
 {translation,

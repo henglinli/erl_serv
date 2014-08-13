@@ -4,13 +4,13 @@
   {description, "riak_core based app"},
   {vsn, git},
   {registered, []},
+  {included_applications, [rafter]},
   {applications, [
 		  kernel,
 		  stdlib,
 		  lager,
 		  sidejob,
-		  riak_core,
-		  serv_kv
+		  riak_core
 		 ]},
   {mod, { serv_app, []}},
   {env, []}
