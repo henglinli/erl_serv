@@ -125,15 +125,15 @@ handoff_starting(_TargetNode, State) ->
     {true, State}.
 
 handoff_cancelled(State) ->
-    lager:info("handoff_cancelled(State)"),
+    lager:info("handoff_cancelled(~p)", [State]),
     {ok, State}.
 
 handoff_finished(TargetNode, State) ->
-    lager:info("handoff_finished(~p, State)", [TargetNode]),
+    lager:info("handoff_finished(~p, ~p)", [TargetNode, State]),
     {ok, State}.
 
 handle_handoff_data(Data, State) ->
-    lager:info("handle_handoff_data(~p, State)", [Data]),
+    lager:info("handle_handoff_data(~p, ~p)", [Data, State]),
     {reply, ok, State}.
 
 encode_handoff_item(_ObjectName, _ObjectValue) ->

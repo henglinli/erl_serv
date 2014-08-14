@@ -20,13 +20,13 @@
 -record(state, {last_id :: integer}).
 
 %% @doc decode/2 -> process/3 [-> procss_stream/3] -> encode/2
-%% @doc 1, decode binary to record 
+%% @doc 1, decode binary to record
 -spec decode(Message :: binary()) ->
 		    {ok, DecodedMessage :: term()} |
 		    {error, Reason :: term()}.
-decode(Message) -> 
+decode(Message) ->
     case serv_pb_chat_pb:decode(chat, Message) of
-	#chat{} = Record ->				   
+	#chat{} = Record ->
 	    {ok, Record};
 	_Other ->
 	    {error, <<"decode">>}
@@ -34,7 +34,7 @@ decode(Message) ->
 %% @doc 2, process record and return record
 -spec process(Message :: term(), State :: term()) ->
 		     {reply, ReplyMessage :: term(), NewState :: term()} |
-		     {reply, {stream, ReqId :: term()}, NewState :: term()} |
+		     {stream, ReqId :: term(), NewState :: term()} |
 		     {error, Reason :: term(), NewState :: term()}.
 process(#chat{from=_Self, to=To}=Record, undefined) ->
     %% send [mesasge] to server
@@ -75,8 +75,8 @@ encode(#chat_id{}=ChatId) ->
     [?CHAT_ID_CODE, EncodedRecordId];
 
 encode(_ChatId) ->
-    Reply = #reply{id=0, errcode=1, errmsg = <<"encode">>},
-    [?REPLY_CODE, serv_pb_chat_pb:encode(Reply)].
+    Response = #response{errcode=17, errmsg = <<"Bad Response">>},
+    [?RESPONSE_CODE, serv_pb_chat_pb:encode(Response)].
 
 %%%===================================================================
 %%% Internal functions

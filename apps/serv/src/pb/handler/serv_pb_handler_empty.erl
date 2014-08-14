@@ -26,7 +26,7 @@ decode(_Message) ->
 %% @doc 2, process record and return record
 -spec process(Message :: term(), State :: term()) ->
 		     {reply, ReplyMessage :: term(), NewState :: term()} |
-		     {reply, {stream, ReqId :: term()}, NewState :: term()} |
+		     {stream, ReqId :: term(), NewState :: term()} |
 		     {error, Reason :: term(), NewState :: term()}.
 process(_Message, State) ->
     {error, <<"process">>, State}.
@@ -46,8 +46,8 @@ process_stream(_Message, _ReqId, State) ->
 		    {ok, EncodedMessage :: iodata()} |
 		    {error, Reason :: term()}.
 encode(_Response) ->
-    Response = #response{errcode=1, errmsg = <<"bad response">>},
-    [?REPLY_CODE, serv_pb_base_pb:encode(Response)].
+    Response = #response{errcode=1, errmsg = <<"Bad response">>},
+    [?RESPONSE_CODE, serv_pb_base_pb:encode(Response)].
 
 %%%===================================================================
 %%% Internal functions

@@ -41,7 +41,7 @@
 %% @doc 2, process record and return record
 -callback process(Message :: term(), State :: term()) ->
     {reply, ReplyMessage :: term(), NewState :: term()} |
-    {reply, {stream, ReqId :: term()}, NewState :: term()} |
+    {stream, ReqId :: term(), NewState :: term()} |
     {error, Reason :: term(), NewState :: term()}.
 %% @doc 3, if return stream procss it
 -callback process_stream(Message :: term(), ReqId :: term(), State :: term()) ->
