@@ -81,9 +81,16 @@ init([]) ->
 	       [{serv_rafter, erlang:node()}, Opts]},
 	      permanent, 5000, supervisor, [rafter_consensus_sup]},
 
+    %% riak_ensemble
+    EnsemblesKV =  {riak_kv_ensembles,
+		    {riak_kv_ensembles, start_link, []},
+		    permanent, 30000, worker, [riak_kv_ensembles]},
+
+
     %% Build the process list...
     Processes = lists:flatten([
 			       ?IF(HasStorageBackend, Rafter, []),
+			       [EnsemblesKV || riak_core_sup:ensembles_enabled()],
 			       ServWokerPoolSupSpec,
 			       ServPbSupSpec,
 			       ServVnodeSpec

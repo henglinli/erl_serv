@@ -232,6 +232,18 @@
 %%  end
 %% }.
 
+%% @doc Enable consensus subsystem. Set to 'on' to enable the
+%% consensus subsystem used for strongly consistent Riak operations.
+{mapping, "strong_consistency", "riak_core.enable_consensus", [
+  {datatype, flag},
+  {default, on}
+]}.
+
+%% @doc use rafter?
+{mapping, "rafter", "serv.rafter", [
+  {datatype, flag},
+  {default, off}
+]}.
 %% @doc Cookie for distributed node communication.  All nodes in the
 %% same cluster should use the same cookie or they will not be able to
 %% communicate.
