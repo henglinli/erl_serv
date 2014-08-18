@@ -37,23 +37,23 @@
 %% @doc 1, decode binary to record
 -callback decode(Message :: binary()) ->
     {ok, DecodedMessage :: term()} |
-    {error, Reason :: term()}.
+    {error, Reason :: iodata()}.
 %% @doc 2, process record and return record
 -callback process(Message :: term(), State :: term()) ->
     {reply, ReplyMessage :: term(), NewState :: term()} |
     {stream, ReqId :: term(), NewState :: term()} |
-    {error, Reason :: term(), NewState :: term()}.
+    {error, Reason :: iodata(), NewState :: term()}.
 %% @doc 3, if return stream procss it
 -callback process_stream(Message :: term(), ReqId :: term(), State :: term()) ->
     {reply, Reply :: [term()] | term(), NewState :: term()} |
     {ignore, NewState :: term()} |
-    {done, Reply :: [term()] | term(), NewState :: term()} |
+    {done, Reply :: iodata(), NewState :: term()} |
     {done, NewState :: term()} |
-    {error, Reason :: term(), NewState :: term()}.
+    {error, Reason :: iodata(), NewState :: term()}.
 %% @doc 4, encode record to iodata
 -callback encode(Message :: term()) ->
     {ok, EncodedMessage :: iodata()} |
-    {error, Reason :: term()}.
+    {error, Reason :: iodata()}.
 
 %%%===================================================================
 %%% API

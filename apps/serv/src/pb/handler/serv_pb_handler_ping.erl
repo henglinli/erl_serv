@@ -21,14 +21,14 @@
 %% @doc 1, decode binary to record
 -spec decode(Message :: binary()) ->
 		    {ok, DecodedMessage :: term()} |
-		    {error, Reason :: term()}.
+		    {error, Reason :: iodata()}.
 decode(_Message) ->
     {ok, ping}.
 %% @doc 2, process record and return record
 -spec process(Message :: term(), State :: term()) ->
 		     {reply, ReplyMessage :: term(), NewState :: term()} |
 		     {stream, ReqId :: term(), NewState :: term()} |
-		     {error, Reason :: term(), NewState :: term()}.
+		     {error, Reason :: iodata(), NewState :: term()}.
 process(_Message, State) ->
     {reply, pong, State}.
 
@@ -36,7 +36,7 @@ process(_Message, State) ->
 -spec process_stream(Message :: term(), ReqId :: term(), State :: term()) ->
 			    {reply, Reply :: [term()] | term(), NewState :: term()} |
 			    {ignore, NewState :: term()} |
-			    {done, Reply :: [term()] | term(), NewState :: term()} |
+			    {done, Reply :: iodata(), NewState :: term()} |
 			    {done, NewState :: term()} |
 			    {error, Reason :: term(), NewState :: term()}.
 process_stream(_Message, _ReqId, State) ->
@@ -45,10 +45,9 @@ process_stream(_Message, _ReqId, State) ->
 %% @doc 4, encode record to iodata
 -spec encode(Message :: term()) ->
 		    {ok, EncodedMessage :: iodata()} |
-		    {error, Reason :: term()}.
+		    {error, Reason :: iodata()}.
 encode(_Response) ->
-    Ok=serv_pb_error:get(0),
-    [?RESPONSE_CODE, serv_pb_base_pb:encode(Ok)].
+    serv_pb_error:get(0).
 
 %%%===================================================================
 %%% Internal functions

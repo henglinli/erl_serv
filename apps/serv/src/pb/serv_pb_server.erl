@@ -69,20 +69,8 @@ set_socket(Pid, Socket) ->
 
 %% @doc sync send to client
 -spec sync_send({pid, Pid :: pid()} | {name, Name :: binary()},
-		Message :: binary() | iolist()) ->
+		Message :: iodata()) ->
 		       ok | {error, Reason :: term()}.
-sync_send({name, Who}, Message)
-  when erlang:is_binary(Who) ->
-    case serv_pb_session:lookup(Who) of
-	undefined ->
-	    {error, not_found};
-	Sessions ->
-	    lists:map(fun({_Who, {pid, Pid}}) ->
-			      gen_fsm:sync_send_event(Pid, {message, Message})
-		      end,
-		      Sessions)
-    end;
-
 %% send server
 sync_send({pid, Pid}, {server, {0, Server}})
   when erlang:is_pid(Pid) ->
@@ -100,9 +88,10 @@ sync_send({pid, Pid}, {reply, {Id, ErrCode, ErrMsg}})
     gen_fsm:sync_send_event(Pid, {reply, EncodedReply});
 sync_send({pid, Pid}, {msg, Msg})
   when erlang:is_pid(Pid) ->
-    gen_fsm:sync_send_event(Pid, {reply, [?SERVER_CHAT_CODE, Msg]}).
+    EncodedChat = encode_chat(Msg),
+    gen_fsm:sync_send_event(Pid, {reply, EncodedChat}).
 %% @doc send to client
--spec send(Who :: binary(), Message :: binary() | iolist()) ->
+-spec send(Who :: binary(), Message :: iodata()) ->
 		  ok | {error, Reason :: term()}.
 send(Name, _Message) when erlang:is_binary(Name) ->
     {error, <<"not impl">>}.
@@ -201,7 +190,7 @@ wait_for_auth(timeout, #state{socket=Socket,
 	    Control:setopts(Socket, [{active, once}]),
 	    {next_state, wait_for_auth, State};
 	{error, Reason} ->
-	    lager:debug("send error: ~p", [Reason]),
+	    lager:debug("send ping error: ~p", [Reason]),
 	    {stop, Reason, State}
     end;
 
@@ -216,7 +205,7 @@ wait_for_auth({server, Server}, _From,
 	    Control:setopts(Socket, [{active, once}]),
 	    {reply, ok, wait_for_auth, State};
 	{error, Reason} ->
-	    lager:debug("send error: ~p", [Reason]),
+	    lager:debug("send server error: ~p", [Reason]),
 	    {stop, Reason, State}
     end;
 
@@ -248,7 +237,7 @@ ready({reply, Reply}, _From,
 	    {reply, ok, ready, State};
 	{error, Reason} ->
 	    lager:debug("send error: ~p", [Reason]),
-	    {stop, Reason, {error, <<"not connected">>}, State}
+	    {stop, Reason, State}
     end;
 
 ready(_Event, _From, State) ->
@@ -436,6 +425,10 @@ encode_server(ErrCode, ErrMsg, Ip) ->
 					  errmsg=ErrMsg}),
     [?SERVER_CODE, Server].
 
+-spec encode_chat(#chat{}) -> iolist().
+encode_chat(#chat{}=Chat) ->
+    [?SERVER_CHAT_CODE, serv_pb_chat_pb:encode(Chat)].
+
 %% doc wait_for_auth state's handler
 -spec wait_handler(non_neg_integer()) -> atom().
 wait_handler(MsgCode) ->
@@ -476,8 +469,6 @@ ready_handler(MsgCode) ->
 		  binary(), term(), #state{}) -> tuple().
 handle_wait(Handler, MsgCode, MsgData, Session, State) ->
     NotSupport=serv_pb_error:get(2),
-    ErrDecode=serv_pb_error:get(17),
-    ErrProcess=serv_pb_error:get(18),
     case Handler:decode(MsgData) of
 	{ok, Message} ->
 	    case Handler:process(Message, Session) of
@@ -500,22 +491,20 @@ handle_wait(Handler, MsgCode, MsgData, Session, State) ->
 		     State#state{response=Response,
 				 session=NewSession}, 0};
 		%% error
-		{error, _Reason, NewSession} ->
+		{error, Reason, NewSession} ->
 		    {next_state, wait_for_auth,
-		     State#state{response=ErrProcess,
+		     State#state{response=Reason,
 				 session=NewSession}}
 	    end;
-	{error, _Reason} ->
+	{error, Reason} ->
 	    {next_state, wait_for_auth,
-	     State#state{response=ErrDecode,
+	     State#state{response=Reason,
 			 session=Session}}
     end.
 %% @doc handle state ready's message
 -spec handle_ready(atom(), binary(), term(), #state{}) -> tuple().
 handle_ready(Handler, MsgData, HandlerStates, State) ->
     NotSupport=serv_pb_error:get(2),
-    ErrDecode=serv_pb_error:get(17),
-    ErrProcess=serv_pb_error:get(18),
     case Handler:decode(MsgData) of
 	{ok, Message} ->
 	    case Handler:process(Message, HandlerStates) of
@@ -531,13 +520,13 @@ handle_ready(Handler, MsgData, HandlerStates, State) ->
 		     State#state{response=Response,
 				 states=NewHandlerStates}, 0};
 		%% error
-		{error, _Reason, NewHandlerStates} ->
+		{error, Reason, NewHandlerStates} ->
 		    {next_state, ready,
-		     State#state{response=ErrProcess,
+		     State#state{response=Reason,
 				 states=NewHandlerStates}}
 	    end;
-	{error, _Reason} ->
+	{error, Reason} ->
 	    {next_state, ready,
-	     State#state{response=ErrDecode,
+	     State#state{response=Reason,
 			 states=HandlerStates}}
     end.

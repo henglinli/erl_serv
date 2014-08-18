@@ -19,7 +19,8 @@
 		 {1, <<"Bad packet">>},
 		 {2, <<"Not support">>},
 		 {17, <<"Cannot decode">>},
-		 {18, <<"Cannot process">>}
+		 {18, <<"Cannot process">>},
+		 {19, <<"Cannot encode">>}
 		]).
 
 -define(UNKNOWN, <<"Unkown error code">>).
@@ -30,8 +31,8 @@
 -spec get(non_neg_integer()) -> iolist().
 get(ErrCode) ->
     Error = #response{errcode=ErrCode,
-	       errmsg=proplists:get_value(ErrCode, ?ERRORS, ?UNKNOWN)},
-    [?RESPONSE_CODE, Error].
+		      errmsg=proplists:get_value(ErrCode, ?ERRORS, ?UNKNOWN)},
+    [?RESPONSE_CODE, serv_pb_base_pb:encode(Error)].
 %%--------------------------------------------------------------------
 %% @doc
 %% @spec

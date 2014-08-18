@@ -23,19 +23,19 @@
 %% @doc 1, decode binary to record
 -spec decode(Message :: binary()) ->
 		    {ok, DecodedMessage :: term()} |
-		    {error, Reason :: term()}.
+		    {error, Reason :: iodata()}.
 decode(Message) ->
     case serv_pb_chat_pb:decode(chat, Message) of
 	#chat{} = Record ->
 	    {ok, Record};
 	_Other ->
-	    {error, <<"decode">>}
+	    {error, serv_pb_error:get(17)}
     end.
 %% @doc 2, process record and return record
 -spec process(Message :: term(), State :: term()) ->
 		     {reply, ReplyMessage :: term(), NewState :: term()} |
 		     {stream, ReqId :: term(), NewState :: term()} |
-		     {error, Reason :: term(), NewState :: term()}.
+		     {error, Reason :: iodata(), NewState :: term()}.
 process(#chat{from=_Self, to=To}=Record, undefined) ->
     %% send [mesasge] to server
     Message = #message{id=1, from=erlang:self(), to=To, msg=Record},
@@ -54,29 +54,28 @@ process(#chat{from=_Self, to=To}=Record, #state{last_id=LastId}) ->
     {reply, #chat_id{id=Id}, #state{last_id=Id}};
 
 process(_Message, State) ->
-    {error, <<"process">>, State}.
+    {error, serv_pb_error:get(18), State}.
 
 %% @doc 3, if return stream procss it
 -spec process_stream(Message :: term(), ReqId :: term(), State :: term()) ->
 			    {reply, Reply :: [term()] | term(), NewState :: term()} |
 			    {ignore, NewState :: term()} |
-			    {done, Reply :: [term()] | term(), NewState :: term()} |
+			    {done, Reply :: iodata(), NewState :: term()} |
 			    {done, NewState :: term()} |
-			    {error, Reason :: term(), NewState :: term()}.
+			    {error, Reason :: iodata(), NewState :: term()}.
 process_stream(_Message, _ReqId, State) ->
     {ignore, State}.
 
 %% @doc 4, encode record to iodata
 -spec encode(Message :: term()) ->
 		    {ok, EncodedMessage :: iodata()} |
-		    {error, Reason :: term()}.
+		    {error, Reason :: iodata()}.
 encode(#chat_id{}=ChatId) ->
     EncodedRecordId = serv_pb_chat_pb:encode(ChatId),
     [?CHAT_ID_CODE, EncodedRecordId];
 
 encode(_ChatId) ->
-    Response = #response{errcode=17, errmsg = <<"Bad Response">>},
-    [?RESPONSE_CODE, serv_pb_chat_pb:encode(Response)].
+    serv_pb_error:get(19).
 
 %%%===================================================================
 %%% Internal functions
