@@ -17,7 +17,7 @@
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_POOL_SIZE, 64).
+-define(DEFAULT_POOL_SIZE, 8).
 %%%===================================================================
 %%% API functions
 %%%===================================================================

@@ -214,17 +214,24 @@
   {datatype, directory}
 ]}.
 
-{translation,
- "serv.pool_size",
- fun(Conf) ->
-         Psize = case cuttlefish:conf_get("erlang.async_threads", Conf) of
-                     undefined ->
-                         64;
-                     Threads ->
-                         Threads
-                 end
- end
-}.
+%% @doc sender work pool size
+{mapping, "pool_size", "serv.pool_size", [
+  {default, 8},
+  {datatype, integer}
+]}.
+
+%% {translation,
+%%  "serv.pool_size",
+%%  fun(Conf) ->
+%%          Psize = case cuttlefish:conf_get("erlang.async_threads", Conf) of
+%%                      undefined ->
+%%                          64;
+%%                      Threads ->
+%%                          Threads
+%%                  end
+%%  end
+%% }.
+
 %% @doc Cookie for distributed node communication.  All nodes in the
 %% same cluster should use the same cookie or they will not be able to
 %% communicate.
