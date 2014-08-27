@@ -69,27 +69,27 @@ init([]) ->
 		     Restart, Shutdown, supervisor, [serv_pb_sup]},
 
     %% Figure out which processes we should run...
-    HasStorageBackend = (app_helper:get_env(serv, storage_backend) /= undefined),
+    _HasStorageBackend = (app_helper:get_env(serv, storage_backend) /= undefined),
     %% rafter
     Backend = app_helper:get_env(serv, storage_backend, serv_rafter_backend_eleveldb),
     RafterDir = app_helper:get_env(serv, rafter_root, "rafter"),
     filelib:ensure_dir(RafterDir),
     Opts = #rafter_opts{state_machine=Backend, logdir=RafterDir},
 
-    Rafter = {serv_rafter_sup,
+    _Rafter = {serv_rafter_sup,
 	      {rafter_consensus_sup, start_link,
 	       [{serv_rafter, erlang:node()}, Opts]},
 	      permanent, 5000, supervisor, [rafter_consensus_sup]},
 
     %% riak_ensemble
-    EnsemblesKV =  {riak_kv_ensembles,
-		    {riak_kv_ensembles, start_link, []},
-		    permanent, 30000, worker, [riak_kv_ensembles]},
+    EnsemblesKV =  {serv_kv_ensembles,
+		    {serv_kv_ensembles, start_link, []},
+		    permanent, 30000, worker, [serv_kv_ensembles]},
 
 
     %% Build the process list...
     Processes = lists:flatten([
-			       ?IF(HasStorageBackend, Rafter, []),
+			       %%?IF(HasStorageBackend, Rafter, []),
 			       [EnsemblesKV || riak_core_sup:ensembles_enabled()],
 			       ServWokerPoolSupSpec,
 			       ServPbSupSpec,
