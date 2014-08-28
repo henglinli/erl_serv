@@ -4,7 +4,7 @@
   {description, "riak_core based app"},
   {vsn, git},
   {registered, []},
-  {included_applications, [rafter]},
+  {included_applications, []},
   {applications, [
 		  kernel,
 		  stdlib,
