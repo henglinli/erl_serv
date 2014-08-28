@@ -12,7 +12,7 @@
 -include("serv_pb_base_pb.hrl").
 -include("serv_pb_chat_pb.hrl").
 %% handler API
--export([decode/1, process/2, process_stream/3, encode/1]).
+-export([decode/1, process/2, encode/1]).
 
 %%%===================================================================
 %%% API
@@ -34,7 +34,7 @@ decode(Message) ->
 %% @doc 2, process record and return record
 -spec process(Message :: term(), State :: term()) ->
 		     {reply, ReplyMessage :: term(), NewState :: term()} |
-		     {stream, ReqId :: term(), NewState :: term()} |
+		     {async, Module :: module(), NewState :: term()} |
 		     {error, Reason :: iodata(), NewState :: term()}.
 process(#chat{from=_Self, to=To}=Record, undefined) ->
     %% send [mesasge] to server
@@ -56,20 +56,14 @@ process(#chat{from=_Self, to=To}=Record, #state{last_id=LastId}) ->
 process(_Message, State) ->
     {error, serv_pb_error:get(18), State}.
 
-%% @doc 3, if return stream procss it
--spec process_stream(Message :: term(), ReqId :: term(), State :: term()) ->
-			    {reply, Reply :: [term()] | term(), NewState :: term()} |
-			    {ignore, NewState :: term()} |
-			    {done, Reply :: iodata(), NewState :: term()} |
-			    {done, NewState :: term()} |
-			    {error, Reason :: iodata(), NewState :: term()}.
-process_stream(_Message, _ReqId, State) ->
-    {ignore, State}.
-
-%% @doc 4, encode record to iodata
+%% @doc 3, encode record to iodata
 -spec encode(Message :: term()) ->
 		    {ok, EncodedMessage :: iodata()} |
 		    {error, Reason :: iodata()}.
+encode(#reply{}=Reply) ->
+    Encoded = serv_pb_chat_pb:encode(Reply),
+    [?REPLY_CODE, Encoded];
+
 encode(#chat_id{}=ChatId) ->
     EncodedRecordId = serv_pb_chat_pb:encode(ChatId),
     [?CHAT_ID_CODE, EncodedRecordId];

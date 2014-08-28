@@ -19,7 +19,8 @@
 	]).
 
 %% serv_pb api
--export([register/1,
+-export([select/2,
+	 register/1,
 	 deregister/1]).
 
 %%%===================================================================
@@ -35,8 +36,9 @@ ping() ->
 	[] ->
 	    pang;
 	PrefList ->
-	    [IndexNode| _Rest] = PrefList,
-	    riak_core_vnode_master:sync_command(IndexNode, ping, ?SERV, ?TIMEOUT)
+	    riak_core_vnode_master:command(PrefList, ping,
+					   {raw, make_ref(), self()},
+					   ?SERV)
     end.
 
 -spec get_apl(binary(), binary(), integer()) -> node().
@@ -59,16 +61,28 @@ get_apl_user(Name, N)
 		    N :: integer()}) ->
 		  forword | save | {error, Reason :: term()}.
 %% forward message to other
-send({forward, #message{} = _Message, _N} = Work) ->
-%% work {froward, #message{}, N} was send by serv_send_worker
-%% and handle by serv_vnode_work
-    serv_worker_pool:handle_work(Work);
-%% select server
-send({select, _From, _User, _N} = Work) ->
-    serv_worker_pool:handle_work(Work);
+send({forward, 
+      #message{to=User}=Message, N}) ->
+    case get_apl(?MESSAGE, User, N) of
+	[] ->
+	    {error, <<"serv down">>};
+	PrefList ->
+	    riak_core_vnode_master:command(PrefList, {forward, Message}, ?SERV)
+    end;
+
 %% other message
 send(_Work) ->
     {error, <<"not impl">>}.
+
+%% select server
+-spec select(pid(), binary()) -> ok | {error, term()}.
+select(From, User) ->
+    case get_apl(?MESSAGE, User, 1) of
+	[] ->
+	    {error, <<"serv down">>};
+	PrefList ->
+	    riak_core_vnode_master:command(PrefList, {select, From}, ?SERV)
+    end.
 
 -spec register(#session{}) -> ok | {error, term()}.
 register(#session{user=User}=Session) ->
@@ -76,9 +90,7 @@ register(#session{user=User}=Session) ->
 	[] ->
 	    {error, <<"serv down">>};
 	PrefList ->
-	    [IndexNode| _RestPrefList] = PrefList,
-	    riak_core_vnode_master:sync_command(IndexNode, {register, Session},
-						?SERV, ?TIMEOUT)
+	    riak_core_vnode_master:command(PrefList, {register, Session}, ?SERV)
     end;
 %%
 register(_) ->
@@ -90,9 +102,8 @@ deregister(#session{pid=Pid, user=User}) ->
 	[] ->
 	    {error, <<"serv down">>};
 	PrefList ->
-	    [IndexNode| _RestPrefList] = PrefList,
-	    riak_core_vnode_master:sync_command(IndexNode, {deregister, Pid},
-						?SERV, ?TIMEOUT)
+	    %%[IndexNode| _RestPrefList] = PrefList,
+	    riak_core_vnode_master:command(PrefList, {deregister, Pid}, ?SERV)
     end;
 deregister(_) ->
     {error, <<"not impl">>}.

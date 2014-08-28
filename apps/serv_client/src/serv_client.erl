@@ -191,7 +191,7 @@ do_request(continue,
 	{error, Reason} ->
 	    {stop, Reason, State};
 	ok ->
-	    Time = crypto:rand_uniform(2000, 8000),
+	    Time = crypto:rand_uniform(16, 20),
 	    gen_fsm:send_event_after(Time, continue),
 	    {next_state, do_request, State}
     end;
@@ -201,7 +201,7 @@ do_request(_Event, State) ->
 
 do_request(#request{command=chat_random,data=N}, _From,
 	   #state{}=State) ->
-    Time = crypto:rand_uniform(2000, 8000),
+    Time = crypto:rand_uniform(16, 20),
     gen_fsm:send_event_after(Time, continue),
     {reply, ok, do_request, State#state{clients=N}};
 

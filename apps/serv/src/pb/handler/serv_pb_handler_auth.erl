@@ -10,7 +10,7 @@
 -include("serv.hrl").
 -include("serv_pb_base_pb.hrl").
 %% handler API
--export([decode/1, process/2, process_stream/3, encode/1]).
+-export([decode/1, process/2, encode/1]).
 
 %%%===================================================================
 %%% API
@@ -31,11 +31,11 @@ decode(Message) ->
 %% @doc 2, process record and return record
 -spec process(Message :: term(), State :: term()) ->
 		     {reply, ReplyMessage :: term(), NewState :: term()} |
-		     {stream, ReqId :: term(), NewState :: term()} |
+		     {async, Module :: module(), NewState :: term()} |
 		     {error, Reason :: iodata(), NewState :: term()}.
 process(#auth{user=User, password=Password, how=How}, State) ->
-    Response = #response{errmsg = <<"Ok">>,
-			 errcode=0},
+    Response = #response{errcode=0,
+			 errmsg= <<"OK">>},
     case How of
 	1 -> % register
 	    {reply, Response, State};
@@ -44,7 +44,7 @@ process(#auth{user=User, password=Password, how=How}, State) ->
 					user=User,
 					token=Password}) of
 		ok ->
-		    {reply, Response, State};
+		    {async, ?MODULE, State};
 		_Else ->
 		    {error, serv_pb_error:get(18), State}
 	    end
@@ -53,17 +53,7 @@ process(#auth{user=User, password=Password, how=How}, State) ->
 process(_Message, State) ->
     {error, serv_pb_error:get(18), State}.
 
-%% @doc 3, if return stream procss it
--spec process_stream(Message :: term(), ReqId :: term(), State :: term()) ->
-			    {reply, Reply :: [term()] | term(), NewState :: term()} |
-			    {ignore, NewState :: term()} |
-			    {done, Reply :: iodata(), NewState :: term()} |
-			    {done, NewState :: term()} |
-			    {error, Reason :: iodata(), NewState :: term()}.
-process_stream(_Message, _ReqId, State) ->
-    {ignore, State}.
-
-%% @doc 4, encode record to iodata
+%% @doc 3, encode record to iodata
 -spec encode(Message :: term()) ->
 		    {ok, EncodedMessage :: iodata()} |
 		    {error, Reason :: iodata()}.

@@ -37,7 +37,9 @@
 		request=undefined :: term(),  % current request
 		states=undefined :: term(), % per-service connection state
 		response = <<>> :: binary(),
-		session=undefined :: term()
+		session=undefined :: term(),
+		async=undefined :: module(),
+		replys=undefined :: gb_trees:tree()
 	       }).
 %%%===================================================================
 %%% API
@@ -71,29 +73,35 @@ set_socket(Pid, Socket) ->
 -spec sync_send({pid, Pid :: pid()} | {name, Name :: binary()},
 		Message :: iodata()) ->
 		       ok | {error, Reason :: term()}.
-%% send server
-sync_send({pid, Pid}, {server, {0, Server}})
-  when erlang:is_pid(Pid) ->
-    EncodedServer=encode_server(0, <<>>, Server),
-    gen_fsm:sync_send_event(Pid, {server, EncodedServer});
-%% send server errror
-sync_send({pid, Pid}, {server, {ErrCode, ErrMsg}})
-  when erlang:is_pid(Pid) ->
-    EncodedServer=encode_server(ErrCode, ErrMsg, <<>>),
-    gen_fsm:sync_send_event(Pid, {server, EncodedServer});
-%% send reply
-sync_send({pid, Pid}, {reply, {Id, ErrCode, ErrMsg}})
-  when erlang:is_pid(Pid) ->
-    EncodedReply=encode_reply(Id, ErrCode, ErrMsg),
-    gen_fsm:sync_send_event(Pid, {reply, EncodedReply});
-sync_send({pid, Pid}, {msg, Msg})
-  when erlang:is_pid(Pid) ->
-    EncodedChat = encode_chat(Msg),
-    gen_fsm:sync_send_event(Pid, {reply, EncodedChat}).
+sync_send(_Name, _Message) ->
+    {error, <<"not impl">>}.
+
 %% @doc send to client
--spec send(Who :: binary(), Message :: iodata()) ->
+-spec send({pid, Pid :: pid()} | {name, Name :: binary()},
+	   Message :: iodata()) ->
 		  ok | {error, Reason :: term()}.
-send(Name, _Message) when erlang:is_binary(Name) ->
+%% login or register
+send({pid, Pid}, ok) ->
+    Response = #response{errcode=0,
+			 errmsg= <<"OK">>},
+    gen_fsm:send_event(Pid, Response);
+
+%% select
+send({pid, Pid}, {server, Server}) ->
+    Response = #server{errcode=0,
+		       errmsg= <<"OK">>,
+		       ip=Server},
+    gen_fsm:send_event(Pid, Response);
+
+%% reply
+send({pid, Pid}, {reply, _Id, _Result}=Reply) ->
+    gen_fsm:send_event(Pid, Reply);
+
+%% chat
+send({pid, Pid}, {chat, Chat}) ->
+    gen_fsm:send_event(Pid, {chat, Chat});
+
+send(_Name, _Message) ->
     {error, <<"not impl">>}.
 
 %%%===================================================================
@@ -116,7 +124,7 @@ send(Name, _Message) when erlang:is_binary(Name) ->
 -spec init(list()) -> {ok, wait, #state{}}.
 init([]) ->
     serv_pb_stat:update(pbc_connect),
-    {ok, wait_for_socket, #state{}}.
+    {ok, wait_for_socket, #state{replys=gb_trees:empty()}}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -175,85 +183,154 @@ wait_for_socket({set_socket, Socket}, _From,
 	    %% It's not really "ok", but there's no reason for the
 	    %% listener to crash just because this socket had an
 	    %% error. See riak_api#54.
-	    {stop, normal, Reason, State}
+	    {stop, normal, State}
     end;
 
 wait_for_socket(_Event, _From, State) ->
     {reply, {error, <<"not impl">>}, wait_for_socket, State}.
 
 %% auth, only for ping
-wait_for_auth(timeout, #state{socket=Socket,
-			      transport={Transport, Control},
-			      response=Response}=State) ->
-    case Transport:send(Socket, Response) of
-	ok ->
-	    Control:setopts(Socket, [{active, once}]),
-	    {next_state, wait_for_auth, State};
-	{error, Reason} ->
-	    lager:debug("send ping error: ~p", [Reason]),
-	    {stop, Reason, State}
-    end;
+wait_for_auth(timeout, #state{}=State) ->
+    timeout_reply(State, wait_for_auth);
 
+%% login or register
+wait_for_auth(#response{}=Response, State) ->
+    encode_then_reply(State, Response, ready);
+
+%%  select server
+wait_for_auth(Response, #state{}=State) ->
+    encode_then_reply(State, Response, wait_for_auth);
+
+%% other unknown event
 wait_for_auth(_Event, State) ->
     {next_state, wait_for_auth, State}.
-%% for select
-wait_for_auth({server, Server}, _From,
-	      #state{socket=Socket,
-		     transport={Transport, Control}}=State) ->
-    case Transport:send(Socket, Server) of
-	ok ->
-	    Control:setopts(Socket, [{active, once}]),
-	    {reply, ok, wait_for_auth, State};
-	{error, Reason} ->
-	    lager:debug("send server error: ~p", [Reason]),
-	    {stop, Reason, State}
-    end;
 
 wait_for_auth(_Event, _From, State) ->
     {reply, {error, <<"not impl">>}, wait_for_auth, State}.
 
 %% ready
-ready(timeout, #state{socket=Socket,
-		      transport={Transport, Control},
-		      response=Response}=State) ->
-    case Transport:send(Socket, Response) of
-	ok ->
-	    Control:setopts(Socket, [{active, once}]),
-	    {next_state, ready, State};
-	{error, Reason} ->
-	    lager:debug("send error: ~p", [Reason]),
-	    {stop, Reason, State}
+ready(timeout, #state{}=State) ->
+    timeout_reply(State, ready);
+
+%% for chat
+ready({chat, Chat},
+      #state{}=State) ->
+    Encoded = [?SERVER_CHAT_CODE, Chat],
+    reply_encoded(State, Encoded, ready);
+
+%% for reply
+%% value = {N :: error, M :: not_found, L :: forward}
+ready({reply, Id, error},
+      #state{replys=Replys}=State) ->
+    Response=#reply{id=Id,
+		    errcode=2,
+		    errmsg= <<"send to self">>},
+    case ?N of
+	1 ->
+	    encode_then_reply(State, Response, ready);
+	_Else ->
+	    case gb_trees:lookup(Id, Replys) of
+		none ->
+		    Replys1 = gb_trees:insert(Id, {1, 0, 0},  Replys),
+		    {next_state, ready, State#state{replys=Replys1}};
+		{value, {Es, Ns, Fs}} ->
+		      %% N == Value
+		    case Es+Ns+Fs+1 of
+			?N ->
+			    Replys1 = gb_trees:delete(Id, Replys),
+			    encode_then_reply(State#state{replys=Replys1},
+					      Response, ready);
+			_Else ->
+			    Replys1 = gb_trees:update(Id,
+						      {Es+1, Ns, Fs}, Replys),
+			    {next_state, ready, State#state{replys=Replys1}}
+		    end
+	    end
+    end;
+
+ready({reply, Id, not_found},
+      #state{replys=Replys}=State) ->
+    Saved=#reply{id=Id,
+		 errcode=1,
+		 errmsg= <<"saved">>},
+    Forward=#reply{id=Id,
+		   errcode=0,
+		   errmsg= <<"forward">>},
+    case ?N of
+	1 ->
+	    encode_then_reply(State, Saved, ready);
+	_Else ->
+	    case gb_trees:lookup(Id, Replys) of
+		none ->
+		    Replys1 = gb_trees:insert(Id, {0,1,0}, Replys),
+		    {next_state, ready, State#state{replys=Replys1}};
+		{value, {Es, Ns, Fs}} ->
+		    %% N == Value
+		    case Es+Ns+Fs+1 of
+			%% last msg
+			?N ->
+			    %% TODO: save message here
+			    Replys1 = gb_trees:delete(Id, Replys),
+			    case Fs of
+				%% 0 forward
+				0 ->
+				    encode_then_reply(State#state{replys=Replys1},
+						      Saved, ready);
+				_Else ->
+				    encode_then_reply(State#state{replys=Replys1},
+						      Forward, ready)
+			    end;
+			_Else ->
+			    Replys1 =  gb_trees:update(Id,
+						       {Es, Ns+1, Fs},
+						       Replys),
+			    {next_state, ready,
+			     State#state{replys=Replys1}}
+		    end
+	    end
+    end;
+
+ready({reply, Id, forward},
+      #state{replys=Replys}=State) ->
+    Forward=#reply{id=Id,
+		   errcode=0,
+		   errmsg= <<"forward">>},
+    case ?N of
+	1 ->
+	    encode_then_reply(State, Forward, ready);
+	_Else ->
+	    case gb_trees:lookup(Id, Replys) of
+		none ->
+		    Replys1 = gb_trees:insert(Id, {0,1,0}, Replys),
+		    {next_state, ready, State#state{replys=Replys1}};
+		{value, {Es, Ns, Fs}} ->
+		    %% N == Value
+		    case Es+Ns+Fs+1 of
+			%% last msg
+			?N ->
+			    %% TODO: save message here
+			    Replys1 = gb_trees:delete(Id, Replys),
+			    encode_then_reply(State#state{replys=Replys1},
+					      Forward, ready);
+			_Else ->
+			    Replys1 =  gb_trees:update(Id,
+						       {Es, Ns+1, Fs},
+						       Replys),
+			    {next_state, ready,
+			     State#state{replys=Replys1}}
+		    end
+	    end
     end;
 
 ready(_Event, State) ->
     {next_state, ready, State}.
-%% for reply
-ready({reply, Reply}, _From,
-      #state{socket=Socket,
-	     transport={Transport, Control}}=State) ->
-    case Transport:send(Socket, Reply) of
-	ok ->
-	    Control:setopts(Socket, [{active, once}]),
-	    {reply, ok, ready, State};
-	{error, Reason} ->
-	    lager:debug("send error: ~p", [Reason]),
-	    {stop, Reason, State}
-    end;
 
 ready(_Event, _From, State) ->
     {reply, {error, <<"not imp">>}, ready, State}.
 
 %% reply then stop
-reply_then_stop(timeout, #state{response=Response,
-				socket=Socket,
-				transport={Transport, _Control}
-			       }=State) ->
-    case Transport:send(Socket, Response) of
-	ok ->
-	    {stop, normal, State};
-	{error, Reason} ->
-	    {stop, Reason, State}
-    end;
+reply_then_stop(timeout, #state{}=State) ->
+    reply_then_stop(State);
 
 reply_then_stop(_Event, State) ->
     {stop, normal, State}.
@@ -411,24 +488,6 @@ parse_packat(<<MsgCode:8/big-unsigned-integer,
 parse_packat(_) ->
     undefined.
 
--spec encode_reply(integer(), integer(), binary()) -> iolist().
-encode_reply(Id, ErrCode, ErrMsg) ->
-    Reply=serv_pb_chat_pb:encode(#reply{id=Id,
-					errcode=ErrCode,
-					errmsg=ErrMsg}),
-    [?REPLY_CODE, Reply].
-
--spec encode_server(integer(), binary(), binary()) -> iolist().
-encode_server(ErrCode, ErrMsg, Ip) ->
-    Server=serv_pb_base_pb:encode(#server{errcode=ErrCode,
-					  ip=Ip,
-					  errmsg=ErrMsg}),
-    [?SERVER_CODE, Server].
-
--spec encode_chat(#chat{}) -> iolist().
-encode_chat(#chat{}=Chat) ->
-    [?SERVER_CHAT_CODE, serv_pb_chat_pb:encode(Chat)].
-
 %% doc wait_for_auth state's handler
 -spec wait_handler(non_neg_integer()) -> atom().
 wait_handler(MsgCode) ->
@@ -468,15 +527,14 @@ ready_handler(MsgCode) ->
 -spec handle_wait(atom(), non_neg_integer(),
 		  binary(), term(), #state{}) -> tuple().
 handle_wait(Handler, MsgCode, MsgData, Session, State) ->
-    NotSupport=serv_pb_error:get(2),
     case Handler:decode(MsgData) of
 	{ok, Message} ->
 	    case Handler:process(Message, Session) of
-		{stream, _ReqId, NewSession} ->
-		    %% not support stream yet
+		%% async
+		{async, AsyncHandler, NewSession} ->
 		    {next_state, wait_for_auth,
-		     State#state{response=NotSupport,
-				 session=NewSession}, 0};
+		     State#state{async=AsyncHandler,
+				 session=NewSession}};
 		%% reply
 		{reply, ReplyMessage, NewSession} ->
 		    Response=Handler:encode(ReplyMessage),
@@ -504,15 +562,14 @@ handle_wait(Handler, MsgCode, MsgData, Session, State) ->
 %% @doc handle state ready's message
 -spec handle_ready(atom(), binary(), term(), #state{}) -> tuple().
 handle_ready(Handler, MsgData, HandlerStates, State) ->
-    NotSupport=serv_pb_error:get(2),
     case Handler:decode(MsgData) of
 	{ok, Message} ->
 	    case Handler:process(Message, HandlerStates) of
-		{stream, _ReqId, NewHandlerStates} ->
-		    %% not support stream yet
+		%% async
+		{async, AsyncHandler, HandlerStates} ->
 		    {next_state, ready,
-		     State#state{response=NotSupport,
-				 states=NewHandlerStates}, 0};
+		     State#state{async=AsyncHandler,
+				 states=HandlerStates}};
 		%% reply
 		{reply, ReplyMessage, NewHandlerStates} ->
 		    Response=Handler:encode(ReplyMessage),
@@ -529,4 +586,65 @@ handle_ready(Handler, MsgData, HandlerStates, State) ->
 	    {next_state, ready,
 	     State#state{response=Reason,
 			 states=HandlerStates}}
+    end.
+
+%% reply
+-spec reply(term(), term(), term(), iodata(), #state{}, atom()) ->
+		   {next_state, atom(), #state{}} |
+		   {stop, term(), #state{}}.
+reply(Transport, Socket, Control, Response, State, NextStateName) ->
+    case Transport:send(Socket, Response) of
+	ok ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, NextStateName, State};
+	{error, Reason} ->
+	    lager:warning("send error: ~p", [Reason]),
+	    {stop, Reason, State}
+    end.
+
+%% timeout reply
+-spec timeout_reply(#state{}, atom()) ->
+			   {next_state, atom(), #state{}} |
+			   {stop, term(), #state{}}.
+timeout_reply(#state{socket=Socket,
+		     transport={Transport, Control},
+		     response=Response}=State,
+	      NextStateName) ->
+    reply(Transport, Socket, Control, Response, State, NextStateName).
+
+%% encode then reply
+-spec encode_then_reply(#state{}, term(), atom()) ->
+			       {next_state, atom(), #state{}} |
+			       {stop, term(), #state{}}.
+encode_then_reply(#state{async=AsyncHandler,
+			 socket=Socket,
+			 transport={Transport, Control}}=State,
+		  Response,
+		  NextStateName) ->
+    Encoded=AsyncHandler:encode(Response),
+    reply(Transport, Socket, Control, Encoded, State, NextStateName).
+
+%% reply encoded
+-spec reply_encoded(#state{}, term(), atom()) ->
+			   {next_state, atom(), #state{}} |
+			   {stop, term(), #state{}}.
+
+reply_encoded(#state{socket=Socket,
+		     transport={Transport, Control}}=State,
+	      Response,
+	      NextStateName) ->
+    reply(Transport, Socket, Control, Response, State, NextStateName).
+
+%% reply then stop
+-spec reply_then_stop(#state{}) ->
+			     {stop, term(), #state{}}.
+reply_then_stop(#state{response=Response,
+		       socket=Socket,
+		       transport={Transport, _Control}
+		      }=State) ->
+    case Transport:send(Socket, Response) of
+	ok ->
+	    {stop, normal, State};
+	{error, Reason} ->
+	    {stop, Reason, State}
     end.

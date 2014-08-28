@@ -69,41 +69,48 @@ init([Partition]) ->
 forward(Message, Sender, State) ->
     {async, {forward, Message}, Sender, State}.
 -else.
-forward(#message{id=_Id, from=From, to=ToWho, msg=Msg},
-	_Sender, 
+forward(#message{id=Id, from=From, to=ToWho, msg=Msg},
+	_Sender,
 	#state{stid=Stid} = State) ->
     case ets:match_object(Stid, {'_', ToWho}) of
 	[] ->
-	    {reply, not_found, State};
+	    serv_pb_server:send({pid, From}, {reply, Id, not_found}),
+	    {noreply, State};
 	[{Pid, _User} | _Rest] ->
 	    case Pid of
-	    	From ->
-	    	    {reply, not_found, State};
-	    	_Else ->
+		From ->
+		    serv_pb_server:send({pid, From}, {reply, Id, error}),
+		    {noreply, State};
+		_Else ->
 		    %% Msg is binary of #chat{}
-	    	    case serv_pb_server:sync_send({pid, Pid}, {msg, Msg}) of
-			ok ->
-			    {reply, forward, State};
-			_Else ->
-			    {reply, error, State}
-		    end
+		    %% forward
+		    serv_pb_server:send({pid, Pid}, {chat, Msg}),
+		    %% reply
+		    serv_pb_server:send({pid, From}, {reply, Id, forward}),
+		    {noreply, State}
 	    end
     end.
 -endif.
+
 %% select server
-handle_command(select, _Sender, #state{server=Server} = State) ->
-    lager:info("select", []),
-    {reply, {ok, Server}, State};
+handle_command({select, From}, _Sender, #state{server=Server}=State) ->
+    serv_pb_server:send({pid, From}, {server, Server}),
+    {noreply, State};
 %% register server process
 handle_command({register,
 		#session{pid=Pid, user=User}},
 	       _Sender, #state{stid=Stid} = State) ->
     true = ets:insert(Stid, {Pid, User}),
-    {reply, ok, State};
+    %% send serv_pb_server ok
+    serv_pb_server:send({pid, Pid}, ok),
+    {noreply, State};
+
 handle_command({deregister, Pid}, _Sender,
 	       #state{stid=Stid} = State) ->
     true = ets:delete(Stid, Pid),
-    {reply, ok, State};
+    serv_pb_server:send({pid, Pid}, ok),
+    {noreply, State};
+
 %% forward message
 handle_command({forward, Message}, Sender, State) ->
     forward(Message, Sender, State);
