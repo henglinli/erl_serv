@@ -34,7 +34,6 @@
 -record(state, {transport={gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
 		%% socket
 		socket=undefined :: inet:socket() | ssl:sslsocket(),
-		request=undefined :: term(),  % current request
 		states=undefined :: term(), % per-service connection state
 		response = <<>> :: binary(),
 		session=undefined :: term(),
@@ -171,12 +170,10 @@ wait_for_socket({set_socket, Socket}, _From,
 	    case app_helper:get_env(serv_pb, public, false) of
 		true ->
 		    {reply, ok, ready,
-		     State#state{request=undefined,
-				 socket=Socket}};
+		     State#state{socket=Socket}};
 		_Else ->
 		    {reply, ok, wait_for_auth,
-		     State#state{request=undefined,
-				 socket=Socket}}
+		     State#state{socket=Socket}}
 	    end;
 	{error, Reason} ->
 	    lager:error("Could not get PB socket peername: ~p", [Reason]),
@@ -395,8 +392,7 @@ handle_info({tcp_error, _Socket, _Reason}, _StateName, State) ->
     {stop, normal, State#state{socket=undefined}};
 
 handle_info({tcp, Socket, Packet}, wait_for_auth,
-	    #state{request=undefined,
-		   socket=Socket,
+	    #state{socket=Socket,
 		   session=Session}=State) ->
     BadPacket=serv_pb_error:get(1),
     case parse_packat(Packet) of
@@ -411,8 +407,7 @@ handle_info({tcp, Socket, Packet}, wait_for_auth,
     end;
 
 handle_info({tcp, Socket, Packet}, ready,
-	    #state{request=undefined,
-		   socket=Socket,
+	    #state{socket=Socket,
 		   states=HandlerStates}=State) ->
     BadPacket=serv_pb_error:get(1),
     case parse_packat(Packet) of
