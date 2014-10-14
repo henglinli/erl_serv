@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 23 Apr 2014 by  <lee@lee>
 %%%-------------------------------------------------------------------
--module(serv_pb_sup).
+-module(serv_mc_sup).
 
 -behaviour(supervisor).
 %% API
@@ -19,9 +19,9 @@
 
 -define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
 -define(CHILD(I, Type, Args), {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
--define(PB_LISTENER(IP, Port), {serv_pb_listener,
-				{serv_pb_listener, start_link, [IP, Port]},
-				permanent, 5000, worker, [serv_pb_listener]}).
+-define(MC_LISTENER(IP, Port), {serv_mc_listener,
+				{serv_mc_listener, start_link, [IP, Port]},
+				permanent, 5000, worker, [serv_mc_listener]}).
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -70,21 +70,19 @@ init([]) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    Handler = ?CHILD(serv_pb_handler, worker),
-
-    Listener = pb_listener_specs(serv_pb_listener:get_listeners()),
+    Listener = mc_listener_specs(serv_mc_listener:get_listeners()),
     
     case app_helper:get_env(serv, session_type, riak_core) of
 	riak_core ->
-	    {ok, {SupFlags, [Handler, Listener]}};
+	    {ok, {SupFlags, [Listener]}};
 	_Else ->
 	    Session = ?CHILD(serv_pb_session, worker),
-	    {ok, {SupFlags, [Session, Handler, Listener]}}
+	    {ok, {SupFlags, [Session, Listener]}}
     end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-pb_listener_specs([{Ip, Port}]) ->
-    ?PB_LISTENER(Ip, Port).
+mc_listener_specs([{Ip, Port}]) ->
+    ?MC_LISTENER(Ip, Port).

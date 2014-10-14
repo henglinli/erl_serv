@@ -1,6 +1,6 @@
-%% @doc entry point for TCP-based protocol buffers service
+%% @doc entry point for TCP-based memcached service
 
--module(serv_pb_listener).
+-module(serv_mc_listener).
 
 -behaviour(serv_listener).
 
@@ -30,10 +30,10 @@ sock_opts() ->
 			    ok |
 			    {error, Reason::term()}.
 new_connection(Socket) ->
-    case serv_pb_server:start_link() of
+    case serv_mc_binary_server:start_link() of
 	{ok, Pid} ->
 	    ok = gen_tcp:controlling_process(Socket, Pid),
-	    ok = serv_pb_server:set_socket(Pid, Socket),
+	    ok = serv_mc_binary_server:set_socket(Pid, Socket),
 	    ok;
 	Error ->
 	    Error

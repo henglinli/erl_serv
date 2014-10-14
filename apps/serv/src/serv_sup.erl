@@ -40,13 +40,9 @@ init([]) ->
 		     {riak_core_vnode_master, start_link, [serv_vnode]},
 		     Restart, Shutdown, worker, [riak_core_vnode_master]},
 
-    _ServWokerPoolSupSpec = {serv_worker_pool_sup,
-			    {serv_worker_pool_sup, start_link, []},
-			    Restart, Shutdown, supervisor, [serv_worker_pool_sup]},
-
-    ServPbSupSpec = {serv_pb_sup,
-		     {serv_pb_sup, start_link, []},
-		     Restart, Shutdown, supervisor, [serv_pb_sup]},
+    ServMcSupSpec = {serv_mc_sup,
+		     {serv_mc_sup, start_link, []},
+		     Restart, Shutdown, supervisor, [serv_mc_sup]},
 
     %% riak_ensemble
     EnsemblesKV =  {serv_kv_ensembles,
@@ -56,8 +52,7 @@ init([]) ->
     %% Build the process list...
     Processes = lists:flatten([
 			       [EnsemblesKV || riak_core_sup:ensembles_enabled()],
-			       %%ServWokerPoolSupSpec,
-			       ServPbSupSpec,
+			       ServMcSupSpec,
 			       ServVnodeSpec
 			      ]),
 

@@ -19,7 +19,7 @@ start(_StartType, _StartArgs) ->
 	undfined ->
 	    ok;
 	Limit ->
-	    sidejob:new_resource(serv_pb_server_sj, sidejob_supervisor, Limit)
+	    sidejob:new_resource(serv_mc_binary_server_sj, sidejob_supervisor, Limit)
     end,
 
     case serv_sup:start_link() of
@@ -30,9 +30,6 @@ start(_StartType, _StartArgs) ->
 	    ok = riak_core_node_watcher:service_up(?SERV, erlang:self()),
 	    ok = riak_core_ring_events:add_guarded_handler(serv_event_handler_ring, []),
 	    ok = riak_core_node_watcher_events:add_guarded_handler(serv_event_handler_node, []),
-	    %% EntryRoute = {["serv", "ping"], serv_wm_ping, []},
-	    %% webmachine_router:add_route(EntryRoute),
-	    true = serv_pb_handler:register(?CHAT_CODE, serv_pb_handler_chat),
 	    {ok, Pid};
 	{error, Reason} ->
 	    {error, Reason};
@@ -41,5 +38,4 @@ start(_StartType, _StartArgs) ->
     end.
 
 stop(_State) ->
-    true = serv_pb_handler:deregister(?CHAT_CODE),
     ok.
