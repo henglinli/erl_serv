@@ -21,7 +21,7 @@ start_link(IpAddr, PortNum) ->
 sock_opts() ->
     BackLog = app_helper:get_env(serv, pb_backlog, 128),
     NoDelay = app_helper:get_env(serv, disable_pb_nagle, true),
-    [binary, {packet, 2}, {reuseaddr, true},
+    [binary, {packet, raw}, {reuseaddr, true},
      {backlog, BackLog}, {nodelay, NoDelay}].
 
 %% @doc The connection initiation callback for gen_nb_server, called

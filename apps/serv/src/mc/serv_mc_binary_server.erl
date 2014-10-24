@@ -94,7 +94,7 @@ send(_Name, _Message) ->
 %%--------------------------------------------------------------------
 -spec init(list()) -> {ok, wait, #state{}}.
 init([]) ->
-    serv_pb_stat:update(pbc_connect),
+    %%serv_pb_stat:update(pbc_connect),
     {ok, wait_for_socket, #state{}}.
 %%--------------------------------------------------------------------
 %% @private
@@ -139,14 +139,8 @@ wait_for_socket({set_socket, Socket}, _From,
 	    Control:setopts(Socket, [{active, once}]),
 	    %% check if security is enabled, if it is wait for TLS, otherwise go
 	    %% straight into connected state
-	    case app_helper:get_env(serv_pb, public, false) of
-		true ->
-		    {reply, ok, ready,
-		     State#state{socket=Socket}};
-		_Else ->
-		    {reply, ok, wait_for_auth,
-		     State#state{socket=Socket}}
-	    end;
+	    {reply, ok, ready,
+	     State#state{socket=Socket}};	
 	{error, Reason} ->
 	    lager:error("Could not get PB socket peername: ~p", [Reason]),
 	    %% It's not really "ok", but there's no reason for the
@@ -163,7 +157,7 @@ ready(_Event, State) ->
     {next_state, ready, State}.
 
 ready(_Event, _From, State) ->
-    {reply, {error, <<"not imp">>}, ready, State}.
+    {reply, {error, <<"not impl">>}, ready, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -282,4 +276,5 @@ parse_packat(<<MsgCode:8/big-unsigned-integer,
 	       MsgData/binary>>) ->
     {MsgCode, MsgData};
 parse_packat(_) ->
+    lager:info("Bad packet", []),
     undefined.
