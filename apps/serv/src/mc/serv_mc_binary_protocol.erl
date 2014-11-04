@@ -9,7 +9,7 @@
 -module(serv_mc_binary_protocol).
 
 %% API
--export([parse/1, parse/2]).
+-export([parse/2]).
 
 %%%===================================================================
 %%% API
@@ -20,10 +20,10 @@
 %% @spec
 %% @end
 %%--------------------------------------------------------------------
--spec parse(Packet :: binary()) -> any().
-parse(<<Header:192/binary,
-	Rest/binary>>) ->
-    case parse_header(Header) of
+-spec parse(NewPacket:: binary(), Packet:: binary()) -> any().
+parse(<<Front:192/binary,
+	Rest/binary>>, <<>>) ->
+    case parse_header(Front) of
 	{request, Command, KeyLength, ExtrasLength, WhichData, VbucketID, BodyLength, Opaque, CAS} = Header->
 	    case parse_body(Rest, ExtrasLength, KeyLength, BodyLength) of
 		{rest_body, RestBody} ->
@@ -41,15 +41,10 @@ parse(<<Header:192/binary,
 	BadHeader ->
 	    BadHeader
     end;
-parse(Packet) ->
-    {rest, Packet}.
 
-parse({rest, Rest}, NewPacket) ->
-    parse(<<Rest/binary, NewPacket/binary>>);
-
-parse({rest_body, RestBody,
-       {request, Command, KeyLength, ExtrasLength, WhichData, VbucketID, BodyLength, Opaque, CAS} = Header},
-      NewPacket) ->
+parse(NewPacket, {rest_body, RestBody,
+		  {request, Command, KeyLength, ExtrasLength, WhichData, VbucketID, BodyLength, Opaque, CAS} 
+		  = Header}) ->
     case parse_body(RestBody, ExtrasLength, KeyLength, BodyLength, NewPacket) of
 	{rest_body, NewRestBody} ->
 	    {rest_body, NewRestBody, Header};
@@ -57,15 +52,19 @@ parse({rest_body, RestBody,
 	    {request, WhichData, Command, Extras, Key, Value, VbucketID, Opaque, CAS, Rest}
     end;
 
-parse({rest_body, RestBody,
-       {response, Command, KeyLength, ExtrasLength, WhichData, Status, BodyLength, Opaque, CAS} = Header},
-      NewPacket) ->
+parse(NewPacket, {rest_body, RestBody,
+		  {response, Command, KeyLength, ExtrasLength, WhichData, Status, BodyLength, Opaque, CAS}
+		  = Header}) ->
     case parse_body(RestBody, ExtrasLength, KeyLength, BodyLength, NewPacket) of
 	{rest_body, NewRestBody} ->
 	    {rest_body, NewRestBody, Header};
 	{ok, Extras, Key, Value, Rest} ->
 	    {response, WhichData, Command, Extras, Key, Value, Status, Opaque, CAS, Rest}
-    end.
+    end;
+
+parse(NewPacket, Packet) ->
+    parse(<<Packet/binary, NewPacket/binary>>, <<>>).
+
 
 -spec parse_header(Header::binary()) -> any().
 parse_header(<<Magic:8/big-unsigned-integer,

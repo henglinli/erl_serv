@@ -20,7 +20,8 @@
 -export([init/1, handle_event/3,
 	 handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
--export([ready/2, ready/3,
+-export([header/2, header/3,
+	 body/2, body/3,
 	 wait_for_socket/2, wait_for_socket/3]).
 
 -export([set_socket/2, send/2, sync_send/2]).
@@ -30,7 +31,7 @@
 -record(state, {transport={gen_tcp, inet} :: {gen_tcp, inet} | {ssl, ssl},
 		%% socket
 		socket=undefined :: inet:socket() | ssl:sslsocket(),
-		states=undefined :: term() % per-service connection state		
+		rest = <<>> :: binary()
 	       }).
 %%%===================================================================
 %%% API
@@ -139,7 +140,7 @@ wait_for_socket({set_socket, Socket}, _From,
 	    Control:setopts(Socket, [{active, once}]),
 	    %% check if security is enabled, if it is wait for TLS, otherwise go
 	    %% straight into connected state
-	    {reply, ok, ready,
+	    {reply, ok, header,
 	     State#state{socket=Socket}};	
 	{error, Reason} ->
 	    lager:error("Could not get PB socket peername: ~p", [Reason]),
@@ -152,12 +153,19 @@ wait_for_socket({set_socket, Socket}, _From,
 wait_for_socket(_Event, _From, State) ->
     {reply, {error, <<"not impl">>}, wait_for_socket, State}.
 
-%% ready
-ready(_Event, State) ->
-    {next_state, ready, State}.
+%% header
+header(_Event, State) ->
+    {next_state, header, State}.
 
-ready(_Event, _From, State) ->
-    {reply, {error, <<"not impl">>}, ready, State}.
+header(_Event, _From, State) ->
+    {reply, {error, <<"not impl">>}, header, State}.
+
+%% body
+body(_Event, State) ->
+    {next_state, body, State}.
+
+body(_Event, _From, State) ->
+    {reply, {error, <<"not impl">>}, body, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -216,18 +224,35 @@ handle_info({tcp_closed, _Socket}, _StateName, State) ->
 handle_info({tcp_error, _Socket, _Reason}, _StateName, State) ->
     {stop, normal, State#state{socket=undefined}};
 
-handle_info({tcp, Socket, Packet}, ready,
+handle_info({tcp, Socket, Packet}, header,
 	    #state{socket=Socket,
-		   states=_HandlerStates}=State) ->
-    case parse_packat(Packet) of
-	undefined ->
-	    {next_state, ready,
-	     State#state{}, 0};
-	{_MsgCode, _MsgData} ->
-	    {next_state, ready,
-	     State#state{}, 0}
+		   transport={_Transport, Control},
+		   rest=RestPacket}=State) ->
+    case serv_mc_binary_protocol:parse(Packet, RestPacket) of
+	{request, _WhichData, _Command, _Extras, _Key, _Value, _VbucketID, _Opaque, _CAS, Rest} ->
+	    {next_state, header, State#state{rest=Rest}};
+	{rest_body, _RestBody, _Header} = Rest ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, body, State#state{rest=Rest}};
+	Error ->
+	    lager:error("error: ~p", [Error]),
+	    {stop, normal, State}		
     end;
 
+handle_info({tcp, Socket, Packet}, body,
+	    #state{socket=Socket,
+		   transport={_Transport, Control},
+		   rest=RestBody}=State) ->
+     case serv_mc_binary_protocol:parse(Packet, RestBody) of
+	{request, _WhichData, _Command, _Extras, _Key, _Value, _VbucketID, _Opaque, _CAS, Rest} ->
+	    {next_state, header, State#state{rest=Rest}};
+	{rest_body, _RestBody, _Header} = Rest ->
+	    Control:setopts(Socket, [{active, once}]),
+	    {next_state, body, State#state{rest=Rest}};
+	Error ->
+	    lager:error("error: ~p", [Error]),
+	    {stop, normal, State}		
+    end;
 %% unknown mesasge
 handle_info(Message, StateName, State) ->
     %% Throw out messages we don't care about, but log them
@@ -270,11 +295,11 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec parse_packat(Packet::binary()) ->
-			  undefined | {MsgCode::integer(), MsgData::binary()}.
-parse_packat(<<MsgCode:8/big-unsigned-integer,
-	       MsgData/binary>>) ->
-    {MsgCode, MsgData};
-parse_packat(_) ->
-    lager:info("Bad packet", []),
-    undefined.
+%% -spec parse_packat(Packet::binary()) ->
+%% 			  undefined | {MsgCode::integer(), MsgData::binary()}.
+%% parse_packat(<<MsgCode:8/big-unsigned-integer,
+%% 	       MsgData/binary>>) ->
+%%     {MsgCode, MsgData};
+%% parse_packat(_) ->
+%%     lager:info("Bad packet", []),
+%%     undefined.
