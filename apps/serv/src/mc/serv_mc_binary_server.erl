@@ -95,7 +95,6 @@ send(_Name, _Message) ->
 %%--------------------------------------------------------------------
 -spec init(list()) -> {ok, wait, #state{}}.
 init([]) ->
-    %%serv_pb_stat:update(pbc_connect),
     {ok, wait_for_socket, #state{}}.
 %%--------------------------------------------------------------------
 %% @private
@@ -295,11 +294,3 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-%% -spec parse_packat(Packet::binary()) ->
-%% 			  undefined | {MsgCode::integer(), MsgData::binary()}.
-%% parse_packat(<<MsgCode:8/big-unsigned-integer,
-%% 	       MsgData/binary>>) ->
-%%     {MsgCode, MsgData};
-%% parse_packat(_) ->
-%%     lager:info("Bad packet", []),
-%%     undefined.

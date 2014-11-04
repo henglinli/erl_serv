@@ -24,9 +24,7 @@ start(_StartType, _StartArgs) ->
 
     case serv_sup:start_link() of
 	{ok, Pid} ->
-	    ok = riak_core:register(serv, [{vnode_module, serv_vnode},
-					   {stat_mod, serv_pb_stat}
-					  ]),
+	    ok = riak_core:register(serv, [{vnode_module, serv_vnode}]),
 	    ok = riak_core_node_watcher:service_up(?SERV, erlang:self()),
 	    ok = riak_core_ring_events:add_guarded_handler(serv_event_handler_ring, []),
 	    ok = riak_core_node_watcher_events:add_guarded_handler(serv_event_handler_node, []),

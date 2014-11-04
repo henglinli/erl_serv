@@ -26,9 +26,7 @@ sock_opts() ->
 
 %% @doc The connection initiation callback for gen_nb_server, called
 %% when a new socket is accepted.
--spec new_connection(inet:socket()) ->
-			    ok |
-			    {error, Reason::term()}.
+-spec new_connection(inet:socket()) -> ok | {error, Reason::term()}.
 new_connection(Socket) ->
     case serv_mc_binary_server:start_link() of
 	{ok, Pid} ->
